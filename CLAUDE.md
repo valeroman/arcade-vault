@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Arcade Vault — online gaming platform where players compete for points. Uses **Spec Driven Design** via `/spec` and `/spec-impl` skills from [Klerith/fernando-skills](https://github.com/Klerith/fernando-skills).
 
 Install skills:
+
 ```bash
 npx skills@latest add Klerith/fernando-skills
 ```
@@ -20,16 +21,11 @@ npx skills@latest add Klerith/fernando-skills
 - **Tailwind CSS v4** — uses `@import "tailwindcss"` and `@theme inline {}` syntax, NOT `tailwind.config.js`
 - **TypeScript** with `strict: true`, path alias `@/*` → root
 
-## Commands
-
-```bash
-npm run dev      # dev server
-npm run build    # production build
-npm run start    # production server
-npm run lint     # eslint
-```
-
 No test runner is configured yet.
+
+## Skills
+
+Usa siempre /frontend-design para diseñar la interfaz de usuario.
 
 ## Architecture
 

@@ -35,9 +35,11 @@ export default function RootLayout({
       <body>
         <div className="av-bg" />
         <div className="av-noise" />
-        <Nav />
-        <main className="av-main">{children}</main>
-        <Footer />
+        <div className="av-root">
+          <Nav />
+          <main className="av-main">{children}</main>
+          <Footer />
+        </div>
       </body>
     </html>
   );

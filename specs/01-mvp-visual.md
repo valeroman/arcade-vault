@@ -1,7 +1,7 @@
 ---
 id: 01
 title: MVP Visual — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-06-15
 dependencies: []
 ---

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Press_Start_2P, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
 
 const pressStart2P = Press_Start_2P({
   weight: "400",
@@ -27,10 +29,18 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${pressStart2P.variable} ${jetbrainsMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <div className="av-bg" />
+        <div className="av-noise" />
+        <div className="av-root">
+          <Nav />
+          <main className="av-main">{children}</main>
+          <Footer />
+        </div>
+      </body>
     </html>
   );
 }

@@ -14,10 +14,11 @@ export default function Nav() {
     setUser(getStoredUser());
   }, [pathname]);
 
-  const isActive = (section: "home" | "biblioteca" | "salon" | "auth") => {
+  const isActive = (section: "home" | "biblioteca" | "salon" | "about" | "auth") => {
     if (section === "home") return pathname === "/";
     if (section === "biblioteca") return pathname.startsWith("/games");
     if (section === "salon") return pathname === "/hall-of-fame";
+    if (section === "about") return pathname === "/about";
     if (section === "auth") return pathname === "/auth";
     return false;
   };
@@ -48,6 +49,9 @@ export default function Nav() {
           </Link>
           <Link href="/hall-of-fame" className={isActive("salon") ? "active" : ""}>
             Salón de la Fama
+          </Link>
+          <Link href="/about" className={isActive("about") ? "active" : ""}>
+            Acerca de
           </Link>
         </div>
 
@@ -93,6 +97,9 @@ export default function Nav() {
         </Link>
         <Link href="/hall-of-fame" className={isActive("salon") ? "active" : ""} onClick={close}>
           Salón de la Fama
+        </Link>
+        <Link href="/about" className={isActive("about") ? "active" : ""} onClick={close}>
+          Acerca de
         </Link>
         <Link href="/auth" className={isActive("auth") ? "active" : ""} onClick={close}>
           {user ? "Cuenta" : "Iniciar Sesión"}

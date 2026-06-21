@@ -1,7 +1,7 @@
 ---
 id: 03
 title: About & Contact — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-06-20
 dependencies: [02]
 ---

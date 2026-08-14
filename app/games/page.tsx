@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { GAMES, CATS } from "@/app/data/games";
 import GameCard from "@/components/GameCard";
 
@@ -13,9 +14,9 @@ export default function LibraryPage() {
       GAMES.filter(
         (g) =>
           (cat === "TODOS" || g.cat === cat) &&
-          g.title.toLowerCase().includes(q.toLowerCase())
+          g.title.toLowerCase().includes(q.toLowerCase()),
       ),
-    [q, cat]
+    [q, cat],
   );
 
   return (
@@ -53,6 +54,25 @@ export default function LibraryPage() {
         {filtered.map((g) => (
           <GameCard key={g.id} game={g} />
         ))}
+        <Link href="/games/asteroids" className="card">
+          <div className="cover">
+            <div className="cover-bg cover-rocas" />
+            <div className="label">SHOOTER</div>
+          </div>
+          <div className="meta">
+            <div className="title">ASTEROIDS</div>
+            <div className="desc">
+              Destruye asteroides, esquiva colisiones y sube de nivel.
+            </div>
+            <div className="row">
+              <div className="score-badge">
+                <span>CONTROLES</span>
+                <b>FLECHAS · ESPACIO</b>
+              </div>
+              <span className="btn yellow">JUGAR</span>
+            </div>
+          </div>
+        </Link>
         {filtered.length === 0 && (
           <div
             style={{
@@ -64,7 +84,11 @@ export default function LibraryPage() {
           >
             <div
               className="pixel"
-              style={{ fontSize: 14, color: "var(--magenta)", marginBottom: 12 }}
+              style={{
+                fontSize: 14,
+                color: "var(--magenta)",
+                marginBottom: 12,
+              }}
             >
               NO HAY RESULTADOS
             </div>

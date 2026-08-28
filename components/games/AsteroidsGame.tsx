@@ -1,12 +1,35 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { submitScore } from "@/app/data/scores";
 
 const W = 800;
 const H = 600;
 
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [finalScore, setFinalScore] = useState<number | null>(null);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (finalScore === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await submitScore("rocas", trimmed, finalScore);
+      setSaved(true);
+    } catch {
+      setSaveError("NO SE PUDO GUARDAR. INTENTA DE NUEVO.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -19,6 +42,7 @@ export default function AsteroidsGame() {
     const justPressed: Record<string, boolean> = {};
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
       if (!keys[e.code]) justPressed[e.code] = true;
       keys[e.code] = true;
     };
@@ -393,6 +417,12 @@ export default function AsteroidsGame() {
       level = 1;
       state = "playing";
       spawnAsteroids(4);
+
+      setFinalScore(null);
+      setName("");
+      setSaving(false);
+      setSaved(false);
+      setSaveError(null);
     }
 
     function nextLevel() {
@@ -416,6 +446,7 @@ export default function AsteroidsGame() {
       lives--;
       if (lives <= 0) {
         state = "gameover";
+        setFinalScore(score);
       } else {
         state = "dead";
         deadTimer = 2;
@@ -591,5 +622,58 @@ export default function AsteroidsGame() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} width={W} height={H} />;
+  return (
+    <>
+      <canvas ref={canvasRef} width={W} height={H} />
+      {finalScore !== null && (
+        <div className="modal-bd">
+          <div className="modal">
+            <h2>FIN DEL JUEGO</h2>
+            <div className="final-label">PUNTUACIÓN FINAL</div>
+            <div className="final">{finalScore.toLocaleString("es-ES")}</div>
+            {!saved ? (
+              <div className="input-row">
+                <input
+                  value={name}
+                  onChange={(e) =>
+                    setName(e.target.value.toUpperCase().slice(0, 20))
+                  }
+                  placeholder="TU NOMBRE"
+                  maxLength={20}
+                />
+                <button
+                  className="btn yellow"
+                  onClick={handleSave}
+                  disabled={saving || name.trim().length === 0}
+                >
+                  {saving ? "GUARDANDO…" : "GUARDAR"}
+                </button>
+              </div>
+            ) : (
+              <div className="toast-saved">▸ PUNTUACIÓN GUARDADA_</div>
+            )}
+            {saveError && (
+              <div
+                style={{ color: "var(--magenta)", fontSize: 11, marginTop: 8 }}
+              >
+                {saveError}
+              </div>
+            )}
+            <div className="actions">
+              <div
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  color: "var(--ink-faint)",
+                  letterSpacing: "0.12em",
+                }}
+              >
+                PULSA ESPACIO PARA JUGAR DE NUEVO
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { GAMES } from "@/app/data/games";
+import { getGame, type Game } from "@/app/data/games";
 import { getStoredUser } from "@/app/data/user";
-import { saveScore } from "@/app/data/scores";
 
 export default function GamePlayerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const game = GAMES.find((g) => g.id === id);
+  const [game, setGame] = useState<Game | null>(null);
 
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
@@ -17,7 +16,10 @@ export default function GamePlayerPage() {
   const [paused, setPaused] = useState(false);
   const [over, setOver] = useState(false);
   const [name, setName] = useState("");
-  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getGame(id).then(setGame);
+  }, [id]);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -29,7 +31,7 @@ export default function GamePlayerPage() {
     if (over || paused) return;
     const t = setInterval(
       () => setScore((s) => s + Math.floor(10 + Math.random() * 90)),
-      220
+      220,
     );
     return () => clearInterval(t);
   }, [over, paused]);
@@ -47,12 +49,6 @@ export default function GamePlayerPage() {
     setLevel(1);
     setPaused(false);
     setOver(false);
-    setSaved(false);
-  };
-
-  const handleSave = () => {
-    saveScore({ game: game.id, score, name });
-    setSaved(true);
   };
 
   return (
@@ -61,7 +57,9 @@ export default function GamePlayerPage() {
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <div className="hud-stat">
             <div className="l">Jugador</div>
-            <div className="v" style={{ color: "var(--ink)" }}>{name}</div>
+            <div className="v" style={{ color: "var(--ink)" }}>
+              {name}
+            </div>
           </div>
           <div className="hud-stat">
             <div className="l">Puntuación</div>
@@ -80,8 +78,13 @@ export default function GamePlayerPage() {
           <button className="btn yellow" onClick={() => setPaused((p) => !p)}>
             {paused ? "REANUDAR" : "PAUSA"}
           </button>
-          <button className="btn magenta" onClick={endGame}>FIN</button>
-          <button className="btn ghost" onClick={() => router.push(`/games/${game.id}`)}>
+          <button className="btn magenta" onClick={endGame}>
+            FIN
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => router.push(`/games/${game.id}`)}
+          >
             SALIR
           </button>
         </div>
@@ -133,27 +136,14 @@ export default function GamePlayerPage() {
             <h2>FIN DEL JUEGO</h2>
             <div className="final-label">PUNTUACIÓN FINAL</div>
             <div className="final">{score.toLocaleString("es-ES")}</div>
-            {!saved ? (
-              <div className="input-row">
-                <input
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value.toUpperCase().slice(0, 10))
-                  }
-                  placeholder="TUS INICIALES"
-                />
-                <button className="btn yellow" onClick={handleSave}>
-                  GUARDAR PUNTUACIÓN
-                </button>
-              </div>
-            ) : (
-              <div className="toast-saved">▸ PUNTUACIÓN GUARDADA_</div>
-            )}
             <div className="actions">
               <button className="btn" onClick={restart}>
                 JUGAR DE NUEVO
               </button>
-              <button className="btn magenta" onClick={() => router.push("/games")}>
+              <button
+                className="btn magenta"
+                onClick={() => router.push("/games")}
+              >
                 VOLVER AL VAULT
               </button>
             </div>

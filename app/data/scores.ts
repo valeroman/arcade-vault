@@ -1,24 +1,39 @@
-export type LocalScore = {
-  game: string;
+import { createClient } from "@/utils/supabase/client";
+
+export type ScoreRow = {
+  id: string;
+  game_id: string;
+  player_name: string;
   score: number;
-  name: string;
-  at: number;
+  created_at: string;
 };
 
-const KEY = "av_scores";
-
-export function saveScore(entry: Omit<LocalScore, "at">): void {
-  const all = getScores();
-  all.push({ ...entry, at: Date.now() });
-  localStorage.setItem(KEY, JSON.stringify(all));
+export async function getTopScores(
+  gameId: string,
+  limit: number,
+): Promise<ScoreRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("scores")
+    .select("*")
+    .eq("game_id", gameId)
+    .order("score", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ScoreRow[];
 }
 
-export function getScores(): LocalScore[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as LocalScore[]) : [];
-  } catch {
-    return [];
-  }
+export async function submitScore(
+  gameId: string,
+  playerName: string,
+  score: number,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("scores").insert({
+    game_id: gameId,
+    player_name: playerName,
+    score,
+  });
+  if (error) throw error;
 }

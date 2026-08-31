@@ -90,6 +90,14 @@ update games set route = '/games/asteroids' where id = 'rocas';
 alter table games alter column route set not null;
 
 -- ============================================================
+-- Datos (spec 07): fila de Tetris
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
+('tetris', 'TETRIS', 'Encaja piezas y despeja líneas antes de que se acumulen.',
+ 'El clásico juego de bloques. Rota y posiciona las 7 piezas estándar (más una pieza extra) para completar líneas horizontales. La velocidad aumenta con cada nivel — usa la pieza fantasma para planear tu caída.',
+ 'PUZZLE', 'cover-tetro', 'cyan', 3, '/games/tetris');
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

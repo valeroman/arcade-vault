@@ -91,9 +91,14 @@ alter table games alter column route set not null;
 
 -- ============================================================
 -- Datos (spec 07): fila de Tetris
+-- id = 'tetro' (no 'tetris'): route ya usa el slug '/games/tetris' para la
+-- ruta estática jugable (Paso 6), y en Next.js una ruta estática siempre
+-- gana sobre la dinámica `[id]` para la misma URL — si id también fuera
+-- 'tetris', la página de detalle/leaderboard vía /games/[id] sería
+-- inalcanzable. Mismo patrón que rocas/asteroids (id ≠ slug de route).
 -- ============================================================
 insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
-('tetris', 'TETRIS', 'Encaja piezas y despeja líneas antes de que se acumulen.',
+('tetro', 'TETRIS', 'Encaja piezas y despeja líneas antes de que se acumulen.',
  'El clásico juego de bloques. Rota y posiciona las 7 piezas estándar (más una pieza extra) para completar líneas horizontales. La velocidad aumenta con cada nivel — usa la pieza fantasma para planear tu caída.',
  'PUZZLE', 'cover-tetro', 'cyan', 3, '/games/tetris');
 

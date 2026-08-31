@@ -12,8 +12,7 @@ create table games (
   cat text not null,
   cover text not null,
   color text not null check (color in ('cyan','magenta','yellow','green')),
-  best integer not null default 0,
-  plays text not null default '0',
+  difficulty smallint not null default 3 check (difficulty between 1 and 5),
   created_at timestamptz not null default now()
 );
 
@@ -48,65 +47,28 @@ create policy "scores_insert_public"
   with check (true);
 
 -- ============================================================
--- Datos iniciales: catálogo de 8 juegos (migrado de app/data/games.ts)
--- "rocas" representa el juego real de Asteroids.
+-- Vista: games_with_stats
+-- "Mejor global" y "Partidas" se calculan en vivo desde scores,
+-- en vez de vivir como columnas fijas en games.
 -- ============================================================
-insert into games (id, title, short, long, cat, cover, color, best, plays) values
-(
-  'bloque-buster',
-  'BLOQUE BUSTER',
-  'Rebota la pelota y destruye muros de neón.',
-  'Pilota una nave-paleta y rebota un núcleo de plasma para pulverizar muros de bloques cromáticos. Cada nivel reorganiza la grilla en patrones imposibles. ¿Hasta dónde llegará tu racha?',
-  'ARCADE',
-  'cover-bricks',
-  'cyan',
-  28450,
-  '12.4K'
-),
-(
-  'caida',
-  'CAÍDA',
-  'Encaja las piezas antes de que el techo te aplaste.',
-  'Piezas geométricas descienden desde la oscuridad. Rótalas, encástralas y limpia líneas para sobrevivir. La velocidad aumenta sin piedad cada 10 líneas.',
-  'PUZZLE',
-  'cover-tetro',
-  'magenta',
-  184220,
-  '31.8K'
-),
-(
-  'serpentina',
-  'SERPENTINA',
-  'Crece sin morder tu propia cola.',
-  'Una serpiente de luz recorre la grilla buscando núcleos magenta. Cada bocado la alarga y la hace más veloz. Un movimiento en falso y se devora a sí misma.',
-  'ARCADE',
-  'cover-snake',
-  'green',
-  7820,
-  '9.1K'
-),
-(
-  'gloton',
-  'GLOTÓN',
-  'Devora puntos y escapa de los fantasmas.',
-  'Un círculo glotón patrulla un laberinto coleccionando puntos luminosos. Cuatro espectros lo persiguen, pero cada cierto tiempo aparece una píldora que invierte los papeles.',
-  'ARCADE',
-  'cover-glot',
-  'yellow',
-  96400,
-  '27.2K'
-),
-(
-  'invasores',
-  'INVASORES',
-  'Defiende el planeta de filas alienígenas.',
-  'Olas de pixeles hostiles descienden formación tras formación. Mueve tu cañón en horizontal y abre fuego con precisión, antes de que toquen la superficie.',
-  'SHOOTER',
-  'cover-invaders',
-  'green',
-  54190,
-  '18.0K'
-),
+create view games_with_stats
+  with (security_invoker = on) as
+select
+  g.*,
+  coalesce(max(s.score), 0)::int as best,
+  count(s.id)::int as plays
+from games g
+left join scores s on s.game_id = g.id
+group by g.id;
+
+grant select on games_with_stats to anon;
+
+-- ============================================================
+-- Datos iniciales: un solo juego real (Asteroids)
+-- "rocas" es el juego real de Asteroids; el resto del catálogo
+-- mock (7 juegos) se elimina — no tienen gameplay real.
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty) values
 (
   'rocas',
   'ROCAS',
@@ -115,28 +77,26 @@ insert into games (id, title, short, long, cat, cover, color, best, plays) value
   'SHOOTER',
   'cover-rocas',
   'yellow',
-  41200,
-  '15.6K'
-),
-(
-  'ranaria',
-  'RANARIA',
-  'Cruza la autopista de pixeles.',
-  'Salta entre carriles de coches a toda velocidad y troncos a la deriva en el río. Llega a los nenúfares antes de que se acabe el tiempo.',
-  'ARCADE',
-  'cover-rana',
-  'green',
-  18900,
-  '6.4K'
-),
-(
-  'duelo-pixel',
-  'DUELO PIXEL',
-  'Dos paletas. Una pelota. Reflejos máximos.',
-  'El duelo más puro: dos paletas verticales se enfrentan por rebotar una pelota luminosa. Modo solitario contra la CPU o partida local a dos jugadores.',
-  'VERSUS',
-  'cover-duelo',
-  'cyan',
-  24,
-  '4.2K'
+  3
 );
+
+-- ============================================================
+-- Migración para una base de datos que ya ejecutó el schema
+-- anterior (con columnas games.best / games.plays y 8 juegos).
+-- Ejecutar este bloque en vez del anterior si `games` ya existe.
+-- ============================================================
+-- delete from scores where game_id <> 'rocas';
+-- delete from games  where id      <> 'rocas';
+-- alter table games drop column best, drop column plays;
+-- alter table games add column difficulty smallint not null default 3
+--   check (difficulty between 1 and 5);
+-- create view games_with_stats
+--   with (security_invoker = on) as
+-- select
+--   g.*,
+--   coalesce(max(s.score), 0)::int as best,
+--   count(s.id)::int as plays
+-- from games g
+-- left join scores s on s.game_id = g.id
+-- group by g.id;
+-- grant select on games_with_stats to anon;

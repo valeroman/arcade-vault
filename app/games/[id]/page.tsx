@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getGame } from "@/app/data/games";
+import { getGame, formatPlays, difficultyStars } from "@/app/data/games";
 import { getTopScores } from "@/app/data/scores";
+
+export const dynamic = "force-dynamic";
 
 export default async function GameDetailPage({
   params,
@@ -32,7 +34,7 @@ export default async function GameDetailPage({
           <div className="stat-strip">
             <div>
               <div className="l">Partidas</div>
-              <div className="v">{game.plays}</div>
+              <div className="v">{formatPlays(game.plays)}</div>
             </div>
             <div>
               <div className="l">Mejor global</div>
@@ -55,19 +57,12 @@ export default async function GameDetailPage({
                   textShadow: "0 0 6px rgba(245,255,0,0.5)",
                 }}
               >
-                ★ ★ ★ ☆ ☆
+                {difficultyStars(game.difficulty)}
               </div>
             </div>
           </div>
           <div className="detail-actions">
-            <Link
-              href={
-                game.id === "rocas"
-                  ? "/games/asteroids"
-                  : `/games/${game.id}/play`
-              }
-              className="btn xl pulse"
-            >
+            <Link href="/games/asteroids" className="btn xl pulse">
               ▶&nbsp; JUGAR AHORA
             </Link>
             <Link href="/games" className="btn ghost lg">

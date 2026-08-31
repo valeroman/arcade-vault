@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { submitScore } from "@/app/data/scores";
 
 const W = 800;
@@ -8,6 +9,7 @@ const H = 600;
 
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const restartRef = useRef<(() => void) | null>(null);
 
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -24,12 +26,16 @@ export default function AsteroidsGame() {
     try {
       await submitScore("rocas", trimmed, finalScore);
       setSaved(true);
+      (document.activeElement as HTMLElement | null)?.blur();
     } catch {
       setSaveError("NO SE PUDO GUARDAR. INTENTA DE NUEVO.");
     } finally {
       setSaving(false);
     }
   };
+
+  const handleRestart = () => restartRef.current?.();
+  const handleClose = () => setFinalScore(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -456,7 +462,6 @@ export default function AsteroidsGame() {
     // ── Update ──────────────────────────────────────────────────────────────
     function update(dt: number) {
       if (state === "gameover") {
-        if (pressed("Space")) initGame();
         particles.forEach((p) => p.update(dt));
         particles = particles.filter((p) => !p.dead);
         return;
@@ -612,6 +617,7 @@ export default function AsteroidsGame() {
       rafId = requestAnimationFrame(loop);
     }
 
+    restartRef.current = initGame;
     initGame();
     rafId = requestAnimationFrame(loop);
 
@@ -660,16 +666,15 @@ export default function AsteroidsGame() {
               </div>
             )}
             <div className="actions">
-              <div
-                className="mono"
-                style={{
-                  fontSize: 11,
-                  color: "var(--ink-faint)",
-                  letterSpacing: "0.12em",
-                }}
-              >
-                PULSA ESPACIO PARA JUGAR DE NUEVO
-              </div>
+              <button className="btn yellow" onClick={handleRestart}>
+                JUGAR DE NUEVO
+              </button>
+              <Link href="/games/rocas" className="btn ghost">
+                VER RANKING
+              </Link>
+              <button className="btn ghost" onClick={handleClose}>
+                CERRAR
+              </button>
             </div>
           </div>
         </div>

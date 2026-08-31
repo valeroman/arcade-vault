@@ -81,6 +81,15 @@ insert into games (id, title, short, long, cat, cover, color, difficulty) values
 );
 
 -- ============================================================
+-- Migración (spec 07): columna `route` en games
+-- Asteroids estaba hardcodeado a /games/asteroids; esta columna
+-- permite enrutamiento multi-juego real (p. ej. Tetris).
+-- ============================================================
+alter table games add column route text;
+update games set route = '/games/asteroids' where id = 'rocas';
+alter table games alter column route set not null;
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

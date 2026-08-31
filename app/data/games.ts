@@ -11,6 +11,7 @@ export type Game = {
   difficulty: number;
   best: number;
   plays: number;
+  route: string;
 };
 
 export async function getGames(): Promise<Game[]> {

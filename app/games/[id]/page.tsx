@@ -62,7 +62,7 @@ export default async function GameDetailPage({
             </div>
           </div>
           <div className="detail-actions">
-            <Link href="/games/asteroids" className="btn xl pulse">
+            <Link href={game.route} className="btn xl pulse">
               ▶&nbsp; JUGAR AHORA
             </Link>
             <Link href="/games" className="btn ghost lg">

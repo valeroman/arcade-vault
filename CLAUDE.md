@@ -27,6 +27,8 @@ No test runner is configured yet.
 
 Usa siempre /frontend-design para diseñar la interfaz de usuario.
 
+Usa `/add-game <carpeta>` (p. ej. `/add-game 03-tetris`) para portar un juego vanilla de `references/resources/started-games/` a la plataforma: analiza el juego y genera `specs/NN-slug.md` en estado `Draft`, listo para aprobar y ejecutar con `/spec-impl`.
+
 ## Architecture
 
 App Router only (`app/` directory). No `pages/` directory.

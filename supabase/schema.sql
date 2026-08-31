@@ -81,6 +81,48 @@ insert into games (id, title, short, long, cat, cover, color, difficulty) values
 );
 
 -- ============================================================
+-- Migración (spec 07): columna `route` en games
+-- Asteroids estaba hardcodeado a /games/asteroids; esta columna
+-- permite enrutamiento multi-juego real (p. ej. Tetris).
+--
+-- IMPORTANTE: `games_with_stats` fue creada con `g.*`, que en Postgres
+-- congela la lista de columnas de la vista al momento del CREATE VIEW.
+-- Agregar una columna a `games` no la propaga a la vista, y no se puede
+-- insertar una columna "en medio" del orden con CREATE OR REPLACE VIEW
+-- (solo se permite agregar al final) — hay que hacer DROP + CREATE.
+-- ============================================================
+alter table games add column route text;
+update games set route = '/games/asteroids' where id = 'rocas';
+alter table games alter column route set not null;
+
+drop view if exists games_with_stats;
+
+create view games_with_stats
+  with (security_invoker = on) as
+select
+  g.*,
+  coalesce(max(s.score), 0)::int as best,
+  count(s.id)::int as plays
+from games g
+left join scores s on s.game_id = g.id
+group by g.id;
+
+grant select on games_with_stats to anon;
+
+-- ============================================================
+-- Datos (spec 07): fila de Tetris
+-- id = 'tetro' (no 'tetris'): route ya usa el slug '/games/tetris' para la
+-- ruta estática jugable (Paso 6), y en Next.js una ruta estática siempre
+-- gana sobre la dinámica `[id]` para la misma URL — si id también fuera
+-- 'tetris', la página de detalle/leaderboard vía /games/[id] sería
+-- inalcanzable. Mismo patrón que rocas/asteroids (id ≠ slug de route).
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
+('tetro', 'TETRIS', 'Encaja piezas y despeja líneas antes de que se acumulen.',
+ 'El clásico juego de bloques. Rota y posiciona las 7 piezas estándar (más una pieza extra) para completar líneas horizontales. La velocidad aumenta con cada nivel — usa la pieza fantasma para planear tu caída.',
+ 'PUZZLE', 'cover-tetro', 'cyan', 3, '/games/tetris');
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

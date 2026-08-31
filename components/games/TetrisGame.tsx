@@ -51,6 +51,8 @@ export default function TetrisGame() {
     restartRef.current?.();
   };
 
+  const handleClose = () => setFinalScore(null);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const nextCanvas = nextCanvasRef.current;
@@ -162,6 +164,9 @@ export default function TetrisGame() {
               <Link href="/games/tetro" className="btn ghost">
                 VER RANKING
               </Link>
+              <button className="btn ghost" onClick={handleClose}>
+                CERRAR
+              </button>
             </div>
           </div>
         </div>

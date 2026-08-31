@@ -1,7 +1,7 @@
 ---
 id: 07
 title: TETRIS — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-08-31
 dependencies: [02, 04, 06]
 ---

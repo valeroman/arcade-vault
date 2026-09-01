@@ -723,14 +723,23 @@ a {
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(circle at 70% 50%, var(--magenta) 0 6px, transparent 7px),
-    linear-gradient(90deg, var(--green) 0 40px, transparent 40px) 20% 50% /
-      200px 12px no-repeat,
-    linear-gradient(90deg, var(--green) 0 12px, transparent 12px)
-      calc(20% + 40px) calc(50% - 12px) / 12px 12px no-repeat,
-    linear-gradient(90deg, var(--green) 0 12px, transparent 12px)
-      calc(20% + 28px) calc(50% - 12px) / 12px 12px no-repeat;
-  filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.6));
+    /* cuerpo: trail de círculos en zigzag, cruza todo el panel */
+    radial-gradient(circle at 10% 16%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 10% 28%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 22% 28%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 34% 28%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 34% 40%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 34% 52%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 46% 52%, var(--green) 0 12px, transparent 13px),
+    radial-gradient(circle at 58% 52%, var(--green) 0 12px, transparent 13px),
+    /* cabeza, un poco más grande */
+    radial-gradient(circle at 70% 52%, var(--green) 0 14px, transparent 15px),
+    /* frutas repartidas en los huecos */
+    radial-gradient(circle at 84% 20%, var(--magenta) 0 9px, transparent 10px),
+    radial-gradient(circle at 18% 78%, var(--yellow) 0 8px, transparent 9px),
+    radial-gradient(circle at 62% 86%, var(--magenta) 0 7px, transparent 8px),
+    radial-gradient(circle at 90% 70%, var(--yellow) 0 6px, transparent 7px);
+  filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.5));
 }
 
 .cover-glot {

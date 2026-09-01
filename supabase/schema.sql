@@ -138,6 +138,21 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
  'ARCADE', 'cover-bricks', 'magenta', 2, '/games/arkanoid');
 
 -- ============================================================
+-- Datos (spec 09): fila de Snake
+-- id = 'vibora' (no 'snake'): route ya usa el slug '/games/snake' para la
+-- ruta estática jugable, y una ruta estática siempre gana sobre la
+-- dinámica `[id]` para la misma URL — si id también fuera 'snake', la
+-- página de detalle/leaderboard vía /games/[id] sería inalcanzable. Mismo
+-- patrón que rocas/asteroids, tetro/tetris y ladrillos/arkanoid.
+-- Reusa el bloque .cover-snake huérfano de globals.css (catálogo mock
+-- eliminado) en vez de crear un cover-vibora nuevo.
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
+('vibora', 'SNAKE', 'Come frutas, crece y evita chocar contra ti mismo.',
+ 'El clásico juego de la víbora. Guía a la serpiente por un tablero de 20×20 casillas, come las 22 frutas del huerto para crecer y sumar puntos — pero cuidado: chocar contra la pared o contra tu propio cuerpo termina la partida al instante.',
+ 'ARCADE', 'cover-snake', 'green', 1, '/games/snake');
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

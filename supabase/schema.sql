@@ -123,6 +123,21 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
  'PUZZLE', 'cover-tetro', 'cyan', 3, '/games/tetris');
 
 -- ============================================================
+-- Datos (spec 08): fila de Arkanoid
+-- id = 'ladrillos' (no 'arkanoid'): route ya usa el slug '/games/arkanoid'
+-- para la ruta estática jugable, y una ruta estática siempre gana sobre la
+-- dinámica `[id]` para la misma URL — si id también fuera 'arkanoid', la
+-- página de detalle/leaderboard vía /games/[id] sería inalcanzable. Mismo
+-- patrón que rocas/asteroids y tetro/tetris (id ≠ slug de route).
+-- Reusa el bloque .cover-bricks huérfano de globals.css (catálogo mock
+-- eliminado) en vez de crear un cover-arkanoid nuevo.
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
+('ladrillos', 'ARKANOID', 'Destruye bloques a golpe de rebote antes de que caiga la pelota.',
+ 'El clásico rompe-bloques. Controla la paleta para hacer rebotar la pelota y destruir los bloques de 5 niveles, cada uno más rápido que el anterior. Pierdes una vida si la pelota cae — tienes 3 para completar el juego.',
+ 'ARCADE', 'cover-bricks', 'magenta', 2, '/games/arkanoid');
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

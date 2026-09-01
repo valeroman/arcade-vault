@@ -124,14 +124,16 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
 
 -- ============================================================
 -- Datos (spec 08): fila de Arkanoid
--- id = route slug aquí no hay colisión (a diferencia de rocas/tetro):
--- '/games/arkanoid' usa el mismo slug que el id, sin conflicto con la
--- ruta dinámica [id] porque no hay otro juego con id 'arkanoid'.
+-- id = 'ladrillos' (no 'arkanoid'): route ya usa el slug '/games/arkanoid'
+-- para la ruta estática jugable, y una ruta estática siempre gana sobre la
+-- dinámica `[id]` para la misma URL — si id también fuera 'arkanoid', la
+-- página de detalle/leaderboard vía /games/[id] sería inalcanzable. Mismo
+-- patrón que rocas/asteroids y tetro/tetris (id ≠ slug de route).
 -- Reusa el bloque .cover-bricks huérfano de globals.css (catálogo mock
 -- eliminado) en vez de crear un cover-arkanoid nuevo.
 -- ============================================================
 insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
-('arkanoid', 'ARKANOID', 'Destruye bloques a golpe de rebote antes de que caiga la pelota.',
+('ladrillos', 'ARKANOID', 'Destruye bloques a golpe de rebote antes de que caiga la pelota.',
  'El clásico rompe-bloques. Controla la paleta para hacer rebotar la pelota y destruir los bloques de 5 niveles, cada uno más rápido que el anterior. Pierdes una vida si la pelota cae — tienes 3 para completar el juego.',
  'ARCADE', 'cover-bricks', 'magenta', 2, '/games/arkanoid');
 

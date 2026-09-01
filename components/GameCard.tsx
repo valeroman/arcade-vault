@@ -23,7 +23,7 @@ export default function GameCard({ game }: { game: Game }) {
 
   const btnClass =
     "btn " +
-    (game.color === "magenta" ? "magenta" : game.color === "yellow" ? "yellow" : "");
+    (["magenta", "yellow", "green"].includes(game.color) ? game.color : "");
 
   return (
     <div

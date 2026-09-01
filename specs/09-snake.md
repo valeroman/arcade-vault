@@ -1,7 +1,7 @@
 ---
 id: 09
 title: SNAKE — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-09-01
 dependencies: [04, 06]
 ---
@@ -102,22 +102,22 @@ Ningún paso toca `GameCard.tsx`, `LibraryClient.tsx`, `app/games/page.tsx` ni `
 
 ## Acceptance criteria
 
-- [ ] `/games/snake` carga sin errores en el browser.
-- [ ] El canvas aparece centrado sobre fondo negro dentro del layout de Arcade Vault (Nav visible).
-- [ ] El juego arranca automáticamente al entrar a la página, incluso con la carga asíncrona de `fruits.png`.
-- [ ] La serpiente responde a ← ↑ → ↓ con el mismo giro discreto que el original (no permite revertir 180° sobre sí misma).
-- [ ] El HUD muestra el score correcto, igual que el original.
-- [ ] Comer una fruta hace crecer a la serpiente y suma +10 al score; aparece una fruta nueva de tipo aleatorio.
-- [ ] Chocar contra la pared o contra el propio cuerpo termina la partida y aparece el modal con la puntuación final.
-- [ ] "JUGAR DE NUEVO" reinicia el juego desde cero sin recargar la página.
-- [ ] Guardar el puntaje inserta una fila real en `scores` con `game_id = 'vibora'`.
-- [ ] Escribir un espacio en el input de nombre no reinicia el juego.
-- [ ] El puntaje guardado aparece en `/hall-of-fame` (tab correspondiente) y en `/games/vibora`.
-- [ ] `/games/vibora` (vía `/games/[id]`) muestra "JUGAR AHORA" apuntando a `/games/snake`, sin ser tapada por la ruta estática jugable.
-- [ ] Al navegar fuera de `/games/snake` y volver, el juego no acumula listeners ni loops huérfanos.
-- [ ] La tarjeta de Snake aparece en `/games` con título, descripción y enlace funcional, usando `.cover-snake` y botón `.btn.green`.
-- [ ] `npm run build` no tiene errores de TypeScript ni imports rotos.
-- [ ] No hay regresiones en `/`, `/games`, `/games/rocas`, `/games/tetris`, `/games/arkanoid`, `/hall-of-fame`, `/about`, `/auth`.
+- [x] `/games/snake` carga sin errores en el browser.
+- [x] El canvas aparece centrado sobre fondo negro dentro del layout de Arcade Vault (Nav visible).
+- [x] El juego arranca automáticamente al entrar a la página, incluso con la carga asíncrona de `fruits.png`.
+- [x] La serpiente responde a ← ↑ → ↓ con el mismo giro discreto que el original (no permite revertir 180° sobre sí misma).
+- [x] El HUD muestra el score correcto, igual que el original.
+- [x] Comer una fruta hace crecer a la serpiente y suma +10 al score; aparece una fruta nueva de tipo aleatorio.
+- [x] Chocar contra la pared o contra el propio cuerpo termina la partida y aparece el modal con la puntuación final.
+- [x] "JUGAR DE NUEVO" reinicia el juego desde cero sin recargar la página.
+- [x] Guardar el puntaje inserta una fila real en `scores` con `game_id = 'vibora'`.
+- [x] Escribir un espacio en el input de nombre no reinicia el juego.
+- [x] El puntaje guardado aparece en `/hall-of-fame` (tab correspondiente) y en `/games/vibora`.
+- [x] `/games/vibora` (vía `/games/[id]`) muestra "JUGAR AHORA" apuntando a `/games/snake`, sin ser tapada por la ruta estática jugable.
+- [x] Al navegar fuera de `/games/snake` y volver, el juego no acumula listeners ni loops huérfanos.
+- [x] La tarjeta de Snake aparece en `/games` con título, descripción y enlace funcional, usando `.cover-snake` y botón `.btn.green`.
+- [x] `npm run build` no tiene errores de TypeScript ni imports rotos.
+- [x] No hay regresiones en `/`, `/games`, `/games/rocas`, `/games/tetris`, `/games/arkanoid`, `/hall-of-fame`, `/about`, `/auth`.
 
 ## Decisions taken and discarded
 

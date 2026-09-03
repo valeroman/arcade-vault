@@ -103,7 +103,11 @@ Usa siempre `/frontend-design` para diseñar la interfaz de usuario.
 
 - `/add-game <carpeta>` (p. ej. `/add-game 03-tetris`) — local skill (not tracked in `skills-lock.json`), lives in `.claude/skills/add-game/` with `template.md` and `porting-guide.md`. Analyzes a vanilla game and generates `specs/NN-slug.md` in state `Draft`, ready to approve and run with `/spec-impl`. Never writes code, SQL, or copies assets, and never marks a spec `Aprobado`.
 - `/spec` and `/spec-impl` — vendored copies from `Klerith/fernando-skills`, hashes tracked in `skills-lock.json`. **Editing them by hand breaks the lock** — reinstall with `npx skills@latest add Klerith/fernando-skills`.
-- `.agents/skills/` is a byte-for-byte mirror of `.claude/skills/` — keep both in sync when touching a skill.
+- `.agents/skills/` is a byte-for-byte mirror of `.claude/skills/`, and `.agents/agents/` mirrors `.claude/agents/` the same way — keep both in sync when touching a skill or agent.
+
+## Agents
+
+- `game-planner` (`.claude/agents/game-planner.md`, mirrored in `.agents/agents/`) — decides which game to add next to the catalog. Reads the catalog, `specs/`, and `started-games/`, detects gaps (category, color, difficulty, mechanic) and proposes viable candidates to port. Its memory is [`references/resources/game-suggestions-todo.md`](references/resources/game-suggestions-todo.md), the only file it writes: it reads that file to avoid repeating itself and updates it with every suggestion. Runs **before** `/add-game` in the chain; never writes code, SQL, or specs.
 
 ## Conventions
 

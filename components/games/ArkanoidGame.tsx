@@ -7,13 +7,33 @@ import {
   createGame,
   type EngineHandle,
 } from "@/components/games/arkanoid/engine";
+import {
+  DEFAULT_SKIN,
+  SKINS,
+  readSkin,
+  writeSkin,
+  type SkinId,
+} from "@/components/games/skins";
 
 const W = 800;
 const H = 600;
 
+const SKIN_LIST = Object.values(SKINS);
+
 export default function ArkanoidGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const restartRef = useRef<(() => void) | null>(null);
+  const setSkinRef = useRef<((id: SkinId) => void) | null>(null);
+
+  // Arranca en el default para no desalinear el HTML del servidor; el efecto de
+  // montaje aplica la skin persistida.
+  const [skinId, setSkinId] = useState<SkinId>(DEFAULT_SKIN);
+
+  const handleSkin = (id: SkinId) => {
+    writeSkin(id);
+    setSkinId(id);
+    setSkinRef.current?.(id); // cambio en caliente: la partida sigue viva
+  };
 
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -53,10 +73,15 @@ export default function ArkanoidGame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const stored = readSkin();
+    setSkinId(stored);
+
     const handle: EngineHandle = createGame(canvas, {
       onGameOver: (score) => setFinalScore(score),
+      skin: stored,
     });
     restartRef.current = handle.restart;
+    setSkinRef.current = handle.setSkin;
 
     return () => {
       handle.destroy();
@@ -65,7 +90,29 @@ export default function ArkanoidGame() {
 
   return (
     <>
-      <canvas ref={canvasRef} width={W} height={H} />
+      <div style={{ width: W, margin: "0 auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginBottom: 10,
+          }}
+        >
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+        </div>
+        <canvas ref={canvasRef} width={W} height={H} />
+      </div>
 
       {finalScore !== null && (
         <div className="modal-bd">

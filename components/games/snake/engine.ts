@@ -8,17 +8,28 @@
 import {
   loadSpritesheet,
   drawSprite,
+  drawFruitPrimitive,
   FRUIT_NAMES,
   type FruitName,
 } from "./sprites";
+import {
+  getSkin,
+  DEFAULT_SKIN,
+  type Skin,
+  type SkinId,
+} from "@/components/games/skins";
 
 export type EngineCallbacks = {
   onGameOver: (score: number) => void;
+  /** Skin inicial. Si falta, `clasico` (aspecto original del juego). */
+  skin?: SkinId;
 };
 
 export type EngineHandle = {
   restart: () => void;
   destroy: () => void;
+  /** Cambia la skin en caliente, sin reiniciar la partida en curso. */
+  setSkin: (id: SkinId) => void;
 };
 
 const W = 600;
@@ -64,6 +75,10 @@ export function createGame(
   let destroyed = false;
   let rafId = 0;
   let lastTime: number | null = null;
+
+  // La skin es puro color: vive fuera del estado de partida, así que cambiarla
+  // no toca la serpiente, la fruta, la velocidad ni la puntuación.
+  let skin: Skin = getSkin(cb.skin ?? DEFAULT_SKIN, "vibora");
 
   function spawnFruit() {
     let cell: Segment;
@@ -162,9 +177,9 @@ export function createGame(
   }
 
   function drawOverlay(message: string) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillStyle = skin.overlay;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.font = "bold 48px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -172,19 +187,35 @@ export function createGame(
   }
 
   function draw() {
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = skin.bg;
     ctx.fillRect(0, 0, W, H);
 
     if (fruit) {
-      drawSprite(ctx, fruit.type, fruit.x * CELL, fruit.y * CELL, CELL, CELL);
+      // El sprite fotorrealista solo encaja en la skin clásica; las otras dos
+      // dibujan la fruta con primitivas (misma celda, mismo tamaño, misma
+      // hitbox — el cambio es únicamente de píxeles).
+      if (skin.id === "clasico") {
+        drawSprite(ctx, fruit.type, fruit.x * CELL, fruit.y * CELL, CELL, CELL);
+      } else {
+        drawFruitPrimitive(
+          ctx,
+          fruit.type,
+          fruit.x * CELL,
+          fruit.y * CELL,
+          CELL,
+          CELL,
+          skin.entities,
+          skin.fg,
+        );
+      }
     }
 
     snake.forEach((seg, i) => {
-      ctx.fillStyle = i === 0 ? "#7CFC00" : "#2ecc40";
+      ctx.fillStyle = i === 0 ? skin.accent : skin.accent2;
       ctx.fillRect(seg.x * CELL + 1, seg.y * CELL + 1, CELL - 2, CELL - 2);
     });
 
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.font = "bold 18px monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
@@ -215,6 +246,9 @@ export function createGame(
   return {
     restart: () => {
       initGame();
+    },
+    setSkin: (id: SkinId) => {
+      skin = getSkin(id, "vibora");
     },
     destroy: () => {
       destroyed = true;

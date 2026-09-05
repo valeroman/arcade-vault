@@ -85,6 +85,83 @@ export function loadSpritesheet(cb: () => void) {
   loadingImg.src = "/games/snake/fruits.png";
 }
 
+/**
+ * Fruta dibujada con primitivas de canvas, para las skins `neon` y `retro`.
+ *
+ * El spritesheet es fotorrealista: teñirlo daría un borrón sucio en vez de una
+ * fruta legible, así que en esas skins se sustituye por vectores. `clasico`
+ * sigue usando `drawSprite()` con el PNG intacto (cero regresión visual).
+ *
+ * La forma y el color salen del índice del tipo de fruta, no de un random: la
+ * misma fruta se ve siempre igual. Solo dibuja — no altera qué fruta aparece
+ * ni cuánto puntúa.
+ */
+export function drawFruitPrimitive(
+  ctx: CanvasRenderingContext2D,
+  name: FruitName,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  palette: string[],
+  stemColor: string,
+) {
+  const index = Math.max(0, FRUIT_NAMES.indexOf(name));
+  const fill = palette[index % palette.length] ?? stemColor;
+  const cx = x + w / 2;
+  const cy = y + h / 2 + h * 0.06;
+
+  ctx.save();
+  ctx.shadowColor = fill;
+  ctx.shadowBlur = Math.round(w * 0.28);
+  ctx.fillStyle = fill;
+
+  switch (index % 3) {
+    case 0: // baya redonda
+      ctx.beginPath();
+      ctx.arc(cx, cy, w * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 1: // par tipo cereza
+      ctx.beginPath();
+      ctx.arc(cx - w * 0.16, cy + h * 0.06, w * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + w * 0.16, cy + h * 0.02, w * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    default: // ovalada tipo pera
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, w * 0.26, h * 0.34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+  }
+
+  // Rabito + hojita, en el color de HUD de la skin.
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = stemColor;
+  ctx.lineWidth = Math.max(1, w * 0.07);
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx, y + h * 0.3);
+  ctx.lineTo(cx, y + h * 0.12);
+  ctx.stroke();
+
+  ctx.fillStyle = stemColor;
+  ctx.beginPath();
+  ctx.ellipse(
+    cx + w * 0.12,
+    y + h * 0.16,
+    w * 0.11,
+    h * 0.05,
+    -Math.PI / 5,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawSprite(
   ctx: CanvasRenderingContext2D,
   name: FruitName,

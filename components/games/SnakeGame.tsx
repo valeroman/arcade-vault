@@ -4,13 +4,33 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { submitScore } from "@/app/data/scores";
 import { createGame, type EngineHandle } from "@/components/games/snake/engine";
+import {
+  SKINS,
+  DEFAULT_SKIN,
+  type SkinId,
+  readSkin,
+  writeSkin,
+} from "@/components/games/skins";
 
 const W = 600;
 const H = 600;
 
+const SKIN_LIST = Object.values(SKINS);
+
 export default function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const restartRef = useRef<(() => void) | null>(null);
+  const setSkinRef = useRef<((id: SkinId) => void) | null>(null);
+
+  // El estado arranca en el default para que el render del servidor y el
+  // primero del cliente coincidan; localStorage se lee ya montado.
+  const [skinId, setSkinId] = useState<SkinId>(DEFAULT_SKIN);
+
+  const handleSkin = (id: SkinId) => {
+    writeSkin(id);
+    setSkinRef.current?.(id); // en caliente: no reinicia la partida
+    setSkinId(id);
+  };
 
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -50,19 +70,47 @@ export default function SnakeGame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const initialSkin = readSkin();
+    setSkinId(initialSkin);
+
     const handle: EngineHandle = createGame(canvas, {
       onGameOver: (score) => setFinalScore(score),
+      skin: initialSkin,
     });
     restartRef.current = handle.restart;
+    setSkinRef.current = handle.setSkin;
 
     return () => {
       handle.destroy();
+      setSkinRef.current = null;
     };
   }, []);
 
   return (
     <>
-      <canvas ref={canvasRef} width={W} height={H} />
+      <div style={{ width: W, margin: "0 auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginBottom: 10,
+          }}
+        >
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+        </div>
+        <canvas ref={canvasRef} width={W} height={H} />
+      </div>
 
       {finalScore !== null && (
         <div className="modal-bd">

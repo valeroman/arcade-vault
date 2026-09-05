@@ -2,33 +2,37 @@
 // Lógica pura sin document.getElementById: el HUD y el fin de partida salen
 // por callbacks (`onHud`, `onGameOver`) para que el wrapper React los consuma.
 
+import {
+  getSkin,
+  withAlpha,
+  type Skin,
+  type SkinId,
+} from "@/components/games/skins";
+
 export type HudState = { score: number; lines: number; level: number };
 
 export type EngineCallbacks = {
   onHud: (hud: HudState) => void;
   onGameOver: (score: number) => void;
+  /** Skin inicial. El wrapper la lee de localStorage antes de montar. */
+  skin: SkinId;
 };
 
 export type EngineHandle = {
   restart: () => void;
   destroy: () => void;
+  /** Cambia la skin en caliente: no reinicia la partida ni toca el estado. */
+  setSkin: (id: SkinId) => void;
 };
 
 const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 
-const COLORS: (string | null)[] = [
-  null,
-  "#4dd0e1", // I - cyan
-  "#ffd54f", // O - yellow
-  "#ba68c8", // T - purple
-  "#81c784", // S - green
-  "#e57373", // Z - red
-  "#90caf9", // J - pale blue
-  "#ffb74d", // L - orange
-  "#9e9e9e", // N - tuerca (gris metálico)
-];
+// `games.id` de Tetris: la clave con la que este motor pide su override de
+// skin. Los colores de las piezas viven ahora en `components/games/skins.ts`
+// (`SKINS[*].games.tetro.entities`), indexados por `type - 1`.
+const GAME_ID = "tetro";
 
 const PIECES: (number[][] | null)[] = [
   null,
@@ -76,9 +80,9 @@ const PIECES: (number[][] | null)[] = [
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
-// Color fijo de la grilla: la plataforma no tiene toggle de tema, así que no
-// se lee `--grid-line` vía getComputedStyle como en el original.
-const GRID_LINE_COLOR = "#22222e";
+// La grilla la aporta la skin activa (`skin.grid`). Se sigue sin leer
+// `--grid-line` vía getComputedStyle como en el original: la plataforma no
+// tiene toggle de tema y el canvas no debe depender del CSS computado.
 
 type Piece = {
   type: number;
@@ -116,6 +120,10 @@ export function createGame(
   let dropAccum = 0;
   let dropInterval = 1000;
   let animId = 0;
+
+  // Paleta activa. Es lo único que `setSkin` toca: no forma parte del estado
+  // de la partida, así que cambiarla no altera tablero, nivel ni puntuación.
+  let skin: Skin = getSkin(cb.skin, GAME_ID);
 
   function createBoard(): number[][] {
     return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -243,18 +251,19 @@ export function createGame(
     alpha?: number,
   ) {
     if (!colorIndex) return;
-    const color = COLORS[colorIndex]!;
+    // Módulo por contrato de `entities`: su longitud puede variar por skin.
+    const color = skin.entities[(colorIndex - 1) % skin.entities.length];
     context.globalAlpha = alpha ?? 1;
     context.fillStyle = color;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-    // highlight
-    context.fillStyle = "rgba(255,255,255,0.12)";
+    // highlight — en clásico `fg` es blanco, así que sale el rgba original.
+    context.fillStyle = withAlpha(skin.fg, 0.12);
     context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
     context.globalAlpha = 1;
   }
 
   function drawGrid() {
-    ctx.strokeStyle = GRID_LINE_COLOR;
+    ctx.strokeStyle = skin.grid;
     ctx.lineWidth = 0.5;
     for (let c = 1; c < COLS; c++) {
       ctx.beginPath();
@@ -271,7 +280,11 @@ export function createGame(
   }
 
   function draw() {
+    // El canvas era transparente y dejaba ver el `#000` de la página. Ahora lo
+    // pinta la skin; en clásico ese color es el mismo `#000000`, cero regresión.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = skin.bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     drawGrid();
 
     // board
@@ -406,6 +419,13 @@ export function createGame(
     destroy: () => {
       cancelAnimationFrame(animId);
       document.removeEventListener("keydown", onKeyDown);
+    },
+    setSkin: (id) => {
+      skin = getSkin(id, GAME_ID);
+      // Repinta ya: en pausa o tras el game over el loop está detenido y si no
+      // el cambio de skin no se vería hasta la siguiente partida.
+      draw();
+      drawNext();
     },
   };
 }

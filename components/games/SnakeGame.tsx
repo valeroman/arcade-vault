@@ -11,11 +11,31 @@ import {
   readSkin,
   writeSkin,
 } from "@/components/games/skins";
+import TouchControls, {
+  TouchButtonView,
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const W = 600;
 const H = 600;
 
 const SKIN_LIST = Object.values(SKINS);
+
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowUp", label: "▲", mode: "tap", slot: "dpad-up" },
+  { code: "ArrowDown", label: "▼", mode: "tap", slot: "dpad-down" },
+  { code: "ArrowLeft", label: "◀", mode: "tap", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "tap", slot: "dpad-right" },
+];
+
+// La pausa se ubica en la barra inferior (pastilla con texto), no entre los
+// botones de dirección — ver diseño "bisel CRT".
+const PAUSE_BUTTON: TouchButton = {
+  code: "KeyP",
+  label: "⏸ PAUSA",
+  mode: "tap",
+  slot: "pause",
+};
 
 export default function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -88,15 +108,11 @@ export default function SnakeGame() {
 
   return (
     <>
-      <div style={{ width: W, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+      <div
+        className="game-canvas-wrap"
+        style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
+      >
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -109,7 +125,36 @@ export default function SnakeGame() {
             </button>
           ))}
         </div>
-        <canvas ref={canvasRef} width={W} height={H} />
+        <div className="game-crt">
+          <div className="game-crt-screen">
+            <canvas ref={canvasRef} width={W} height={H} />
+          </div>
+          <div className="game-crt-bottom">
+            <span className="led">SEÑAL VIBORA</span>
+            <span>CRT-83 · 60HZ</span>
+          </div>
+        </div>
+        <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
+            dos funciones relevantes durante el juego reaparecen acá, junto
+            a la pausa (que se muda de los controles a esta barra). */}
+        <div className="game-bottom-bar">
+          <TouchButtonView button={PAUSE_BUTTON} className="pause-pill" />
+          <select
+            className="skin-select"
+            value={skinId}
+            onChange={(e) => handleSkin(e.target.value as SkinId)}
+          >
+            {SKIN_LIST.map((skin) => (
+              <option key={skin.id} value={skin.id}>
+                {skin.label}
+              </option>
+            ))}
+          </select>
+          <Link href="/games" className="btn ghost">
+            ← SALIR
+          </Link>
+        </div>
       </div>
 
       {finalScore !== null && (

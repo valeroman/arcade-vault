@@ -1277,6 +1277,20 @@ a {
   margin-top: 18px;
   flex-wrap: wrap;
 }
+
+/* El modal usa `width: min(480px, 96vw)`, así que en mobile el input +
+   "GUARDAR" no entran en una sola fila: el botón, sin lugar para encogerse
+   por debajo de su ancho natural, se salía del modal. Apilados en táctil,
+   cada uno a lo ancho completo, sin ese límite. Atado a `body.av-touch-game`
+   (no a un ancho de viewport): es la misma detección que ya funciona de
+   forma confiable en el resto de esta spec. */
+body.av-touch-game .modal .input-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+body.av-touch-game .modal .input-row input {
+  flex: none;
+}
 .toast-saved {
   font-family: var(--pixel);
   font-size: 11px;
@@ -2804,4 +2818,441 @@ a {
 }
 .term-body .caret {
   animation: blink 1s steps(1) infinite;
+}
+
+/* ===== mobile touch controls (spec 10) ===== */
+
+/* Wrapper de cada page.tsx de ruta de juego (`app/games/<slug>/page.tsx`).
+   El padding se define acá (no inline) para poder recortarlo en táctil —
+   ver regla de Nav/Footer más abajo. */
+.game-screen {
+  padding: 24px 0;
+}
+
+/* `body.av-touch-game` lo pone/saca `TouchControls.tsx` (mismo hook
+   `useTouchSupport()` que ya gatea sus propios botones) mientras una
+   pantalla de juego está montada en un dispositivo táctil real — evita
+   depender de una media query CSS aparte (`hover`/`pointer` o `:has()`) que
+   podría no coincidir exactamente con esa detección en algunos navegadores
+   móviles. Nav (sticky) + Footer no aportan nada durante la partida y le
+   restan alto útil al canvas. Sus dos funciones relevantes (cambiar skin,
+   volver al catálogo) reaparecen en la barra inferior táctil
+   (`.game-bottom-bar`, más abajo). En desktop no cambia nada. */
+body.av-touch-game .game-screen {
+  padding: 8px 0;
+}
+body.av-touch-game .av-nav,
+body.av-touch-game footer {
+  display: none;
+}
+
+/* Fila de chips de skin arriba del canvas: solo tiene sentido en desktop,
+   donde el Nav (con sus propios links) sigue visible. En táctil se oculta —
+   reaparece, junto con "volver", en `.game-bottom-bar`. */
+.skin-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+body.av-touch-game .skin-row {
+  display: none;
+}
+
+/* Barra inferior táctil: mismos chips de skin + un botón para volver al
+   catálogo, ya que el Nav de arriba está oculto en este mismo modo. Oculta
+   en desktop (esas funciones ya están arriba, en el Nav / la fila de chips
+   de siempre). */
+.game-bottom-bar {
+  display: none;
+}
+body.av-touch-game .game-bottom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 0 12px;
+}
+/* Más compactos en viewports angostos: evita que "REGRESAR" se vaya a su
+   propia línea (cada línea de más le resta alto disponible al juego). */
+@media (max-width: 480px) {
+  .game-bottom-bar .chip {
+    padding: 8px 10px;
+    font-size: 8px;
+  }
+  .game-bottom-bar .btn {
+    padding: 8px 12px;
+    font-size: 8px;
+  }
+}
+
+/* Escalado responsive de los 4 canvas: en desktop `max-width` iguala al ancho
+   fijo de siempre (cero cambio visual); bajo ese ancho, el canvas encoge sin
+   tocar su resolución interna (atributos width/height del elemento). */
+.game-canvas-wrap {
+  max-width: var(--canvas-max-w, 800px);
+  width: 100%;
+  margin: 0 auto;
+  touch-action: none;
+}
+.game-canvas-wrap canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Los 4 juegos son portrait-only en táctil: `.landscape-block` (dentro de
+   `TouchControls`, ver `components/games/TouchControls.tsx`) tapa toda la
+   pantalla en landscape, así que el canvas nunca necesita un ajuste de alto
+   especial para ese caso — solo escala por ancho, como en desktop. */
+.landscape-block {
+  display: none;
+}
+@media (orientation: landscape) {
+  .landscape-block {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--pixel);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+  .landscape-block > div:first-child {
+    font-size: 48px;
+    animation: landscape-block-spin 1.6s ease-in-out infinite;
+  }
+}
+@keyframes landscape-block-spin {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(90deg);
+  }
+}
+
+/* Tetris: layout propio (canvas + aside de preview/stats lado a lado en
+   desktop) en vez de `.game-canvas-wrap`, porque necesita apilarse en
+   viewports angostos sin afectar a los otros 3 juegos. */
+.tetris-layout {
+  max-width: var(--canvas-max-w, 464px);
+  width: 100%;
+  margin: 0 auto;
+}
+.tetris-board-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  touch-action: none;
+}
+.tetris-board-row canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.tetris-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 140px;
+}
+@media (max-width: 480px) {
+  .tetris-board-row {
+    flex-direction: column;
+    /* El tablero (relación 1:2) casi nunca ocupa todo el ancho disponible
+       una vez acotado por alto — centrado en vez de `flex-start` (que lo
+       dejaba pegado a la izquierda con todo el espacio vacío del lado
+       derecho). */
+    align-items: center;
+  }
+  .tetris-aside {
+    width: 100%;
+  }
+  /* El tamaño del preview de la próxima pieza (`.tetris-next-canvas`) lo
+     fija en línea `fitBoard()` en `TetrisGame.tsx`, a la misma escala que
+     el tablero — no un tamaño de CSS fijo, que quedaba grande o chico
+     según cuánto se haya achicado el tablero en cada pantalla. */
+}
+/* Desktop: el aside mide 140px, así que SCORE/LINES/LEVEL van en 1 columna
+   (si no, no entrarían). Apilado (mobile), el aside es angosto pero mide
+   todo el ancho del tablero — de sobra para las 3 en fila, como en
+   `.stat-strip` en cualquier otro lado del sitio (su default). */
+@media (min-width: 481px) {
+  .tetris-aside .stat-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* El tablero de Tetris (300×600, relación 1:2) es angosto y muy alto — a
+   diferencia de los otros 3 juegos, ni en portrait entra completo junto con
+   el aside (stats + preview) y los controles/barra inferior debajo. Un
+   intento con flexbox (el tablero creciendo/encogiendo vía `flex: 1 1
+   auto` dentro de un `.tetris-layout` de alto fijo) no funcionó en la
+   práctica: el porcentaje de alto del canvas no terminaba de resolver
+   contra el alto ya calculado por flex de su contenedor, dos niveles de
+   anidado más arriba. `TetrisGame.tsx` mide el espacio real disponible con
+   JS (`getBoundingClientRect`) y fija `canvas.style.maxHeight` en línea —
+   sin depender de ningún cálculo de CSS ni de un número de píxeles fijo. */
+
+/* Botonera táctil compartida (`TouchControls.tsx`). Se apila debajo del
+   canvas en el flujo normal del documento — nunca se superpone al HUD ni al
+   preview de Tetris. Centrada como un gamepad, no pegada a los bordes. */
+.touch-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  margin-top: 20px;
+  padding: 8px 12px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Cruz de 4 direcciones: Snake (las 4), Tetris (izq/der/abajo) y Asteroids
+   (izq/der/arriba) — cualquier combinación que incluya arriba o abajo. */
+.touch-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
+  grid-template-areas:
+    ".    up    ."
+    "left .     right"
+    ".    down  .";
+  gap: 6px;
+}
+.touch-btn-dpad-up {
+  grid-area: up;
+}
+.touch-btn-dpad-down {
+  grid-area: down;
+}
+.touch-btn-dpad-left {
+  grid-area: left;
+}
+.touch-btn-dpad-right {
+  grid-area: right;
+}
+
+/* Fila simple: juegos que solo usan izquierda/derecha (Arkanoid). Sin la
+   grilla completa, para no dejar huecos arriba/abajo de los botones. */
+.touch-dpad-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.touch-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.touch-btn {
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel);
+  font-size: 18px;
+  color: var(--cyan);
+  background: var(--bg-2);
+  border: 2px solid var(--cyan);
+  border-radius: 50%;
+  box-shadow:
+    0 0 10px rgba(0, 245, 255, 0.2),
+    inset 0 0 8px rgba(0, 245, 255, 0.08);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 120ms,
+    box-shadow 120ms,
+    transform 80ms;
+}
+.touch-btn:active {
+  background: rgba(0, 245, 255, 0.2);
+  box-shadow:
+    0 0 18px rgba(0, 245, 255, 0.6),
+    inset 0 0 10px rgba(0, 245, 255, 0.35);
+  transform: scale(0.94);
+}
+
+/* El d-pad usa botones cuadrados (look de gamepad físico); los de acción
+   siguen circulares, como ya estaban. */
+.touch-dpad .touch-btn,
+.touch-dpad-row .touch-btn {
+  border-radius: 10px;
+}
+
+/* Los botones de acción (disparo, rotar, hard-drop) son más grandes que los
+   de movimiento — la pausa ya no vive acá, se mudó a `.pause-pill` en la
+   barra inferior (ver diseño "bisel CRT"). */
+.touch-actions .touch-btn {
+  width: 68px;
+  height: 68px;
+  font-size: 22px;
+}
+/* Cuando hay dos acciones (p. ej. rotar + hard-drop en Tetris), la segunda
+   en magenta — distingue una de otra de un vistazo, como los "A"/"B" de un
+   gamepad clásico. Asteroids, con una sola, se queda en cian por defecto. */
+.touch-btn-action-2 {
+  border-color: var(--magenta);
+  color: var(--magenta);
+  box-shadow:
+    0 0 10px rgba(255, 0, 110, 0.2),
+    inset 0 0 8px rgba(255, 0, 110, 0.08);
+}
+.touch-btn-action-2:active {
+  background: rgba(255, 0, 110, 0.2);
+  box-shadow:
+    0 0 18px rgba(255, 0, 110, 0.55),
+    inset 0 0 10px rgba(255, 0, 110, 0.35);
+}
+
+/* En viewports angostos, más chicos y más juntos: en Tetris cada pixel de
+   alto que se ahorra acá se lo devuelve al tablero (ver el `fitBoard()` de
+   `TetrisGame.tsx`, que mide justo el espacio que ocupa este bloque). */
+@media (max-width: 480px) {
+  .touch-controls {
+    gap: 24px;
+    margin-top: 12px;
+    padding: 4px 12px;
+  }
+  .touch-dpad {
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+  }
+  .touch-btn {
+    width: 48px;
+    height: 48px;
+    font-size: 15px;
+  }
+  .touch-actions .touch-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 18px;
+  }
+}
+
+/* Botón de pausa reubicado en la barra inferior (pastilla con texto, no un
+   círculo suelto entre los de movimiento — así queda junto al selector de
+   skin y "salir", las otras dos funciones que dejó vacantes el Nav
+   oculto). */
+.pause-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--yellow);
+  background: var(--bg-2);
+  border: 1px solid var(--yellow);
+  border-radius: 6px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-pill:active {
+  background: rgba(245, 255, 0, 0.18);
+  box-shadow: 0 0 12px rgba(245, 255, 0, 0.45);
+}
+
+/* Selector de skin como dropdown nativo en la barra inferior — ocupa menos
+   ancho que los 3 chips, dejando lugar a la pausa y a "salir" en la misma
+   fila. */
+.skin-select {
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 10px 10px;
+  color: var(--ink);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.skin-select:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+/* Bisel "CRT" alrededor del canvas — mismo diseño que `.crt`/`.crt-screen`/
+   `.crt-bottom` (sin usar hoy en ningún componente), copiado en clases
+   propias en vez de reusar esas directamente: así no quedan acopladas a
+   `body.av-touch-game` si alguna otra página llega a usar `.crt` sin querer
+   este comportamiento condicional. Sin efecto en desktop — el canvas se ve
+   exactamente igual que antes de este bloque. */
+body.av-touch-game .game-crt {
+  position: relative;
+  border-radius: 22px;
+  background: #050507;
+  padding: 12px;
+  box-shadow:
+    0 0 0 5px #1b1b22,
+    0 0 0 6px #2a2a35,
+    0 20px 60px -20px rgba(0, 245, 255, 0.3);
+}
+body.av-touch-game .game-crt-screen {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  border-radius: 8px / 16px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 40px rgba(0, 0, 0, 0.9),
+    inset 0 0 14px rgba(0, 245, 255, 0.15);
+}
+body.av-touch-game .game-crt-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.18) 0 2px,
+    transparent 2px 4px
+  );
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.game-crt-bottom {
+  display: none;
+}
+body.av-touch-game .game-crt-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 0 4px;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--ink-faint);
+  letter-spacing: 0.12em;
+}
+.game-crt-bottom .led {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.game-crt-bottom .led::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }

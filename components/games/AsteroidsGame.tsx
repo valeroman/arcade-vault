@@ -13,11 +13,21 @@ import {
   withAlpha,
   writeSkin,
 } from "@/components/games/skins";
+import TouchControls, {
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const W = 800;
 const H = 600;
 
 const SKIN_LIST = Object.values(SKINS);
+
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowLeft", label: "◀", mode: "hold", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "hold", slot: "dpad-right" },
+  { code: "ArrowUp", label: "▲", mode: "hold", slot: "dpad-up" },
+  { code: "Space", label: "🔥", mode: "hold", slot: "action-1" },
+];
 
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -671,15 +681,11 @@ export default function AsteroidsGame() {
 
   return (
     <>
-      <div style={{ width: W, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+      <div
+        className="game-canvas-wrap"
+        style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
+      >
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -692,7 +698,35 @@ export default function AsteroidsGame() {
             </button>
           ))}
         </div>
-        <canvas ref={canvasRef} width={W} height={H} />
+        <div className="game-crt">
+          <div className="game-crt-screen">
+            <canvas ref={canvasRef} width={W} height={H} />
+          </div>
+          <div className="game-crt-bottom">
+            <span className="led">SEÑAL ROCAS</span>
+            <span>CRT-83 · 60HZ</span>
+          </div>
+        </div>
+        <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): su
+            función relevante durante el juego (cambiar skin) reaparece acá.
+            Sin pausa: Asteroids no tiene esa mecánica. */}
+        <div className="game-bottom-bar">
+          <select
+            className="skin-select"
+            value={skinId}
+            onChange={(e) => handleSkin(e.target.value as SkinId)}
+          >
+            {SKIN_LIST.map((skin) => (
+              <option key={skin.id} value={skin.id}>
+                {skin.label}
+              </option>
+            ))}
+          </select>
+          <Link href="/games" className="btn ghost">
+            ← SALIR
+          </Link>
+        </div>
       </div>
       {finalScore !== null && (
         <div className="modal-bd">

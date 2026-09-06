@@ -2857,9 +2857,21 @@ body.av-touch-game .game-bottom-bar {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 16px;
   padding: 0 12px;
+}
+/* Más compactos en viewports angostos: evita que "REGRESAR" se vaya a su
+   propia línea (cada línea de más le resta alto disponible al juego). */
+@media (max-width: 480px) {
+  .game-bottom-bar .chip {
+    padding: 8px 10px;
+    font-size: 8px;
+  }
+  .game-bottom-bar .btn {
+    padding: 8px 12px;
+    font-size: 8px;
+  }
 }
 
 /* Escalado responsive de los 4 canvas: en desktop `max-width` iguala al ancho
@@ -2936,14 +2948,49 @@ body.av-touch-game .game-bottom-bar {
   height: auto;
   display: block;
 }
+.tetris-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 140px;
+}
 @media (max-width: 480px) {
   .tetris-board-row {
     flex-direction: column;
+    /* El tablero (relación 1:2) casi nunca ocupa todo el ancho disponible
+       una vez acotado por alto — centrado en vez de `flex-start` (que lo
+       dejaba pegado a la izquierda con todo el espacio vacío del lado
+       derecho). */
+    align-items: center;
   }
-  .tetris-board-row aside {
+  .tetris-aside {
     width: 100%;
   }
+  /* El tamaño del preview de la próxima pieza (`.tetris-next-canvas`) lo
+     fija en línea `fitBoard()` en `TetrisGame.tsx`, a la misma escala que
+     el tablero — no un tamaño de CSS fijo, que quedaba grande o chico
+     según cuánto se haya achicado el tablero en cada pantalla. */
 }
+/* Desktop: el aside mide 140px, así que SCORE/LINES/LEVEL van en 1 columna
+   (si no, no entrarían). Apilado (mobile), el aside es angosto pero mide
+   todo el ancho del tablero — de sobra para las 3 en fila, como en
+   `.stat-strip` en cualquier otro lado del sitio (su default). */
+@media (min-width: 481px) {
+  .tetris-aside .stat-strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* El tablero de Tetris (300×600, relación 1:2) es angosto y muy alto — a
+   diferencia de los otros 3 juegos, ni en portrait entra completo junto con
+   el aside (stats + preview) y los controles/barra inferior debajo. Un
+   intento con flexbox (el tablero creciendo/encogiendo vía `flex: 1 1
+   auto` dentro de un `.tetris-layout` de alto fijo) no funcionó en la
+   práctica: el porcentaje de alto del canvas no terminaba de resolver
+   contra el alto ya calculado por flex de su contenedor, dos niveles de
+   anidado más arriba. `TetrisGame.tsx` mide el espacio real disponible con
+   JS (`getBoundingClientRect`) y fija `canvas.style.maxHeight` en línea —
+   sin depender de ningún cálculo de CSS ni de un número de píxeles fijo. */
 
 /* Botonera táctil compartida (`TouchControls.tsx`). Se apila debajo del
    canvas en el flujo normal del documento — nunca se superpone al HUD ni al
@@ -3043,4 +3090,29 @@ body.av-touch-game .game-bottom-bar {
   box-shadow:
     0 0 18px rgba(245, 255, 0, 0.55),
     inset 0 0 10px rgba(245, 255, 0, 0.35);
+}
+
+/* En viewports angostos, más chicos y más juntos: en Tetris cada pixel de
+   alto que se ahorra acá se lo devuelve al tablero (ver el `fitBoard()` de
+   `TetrisGame.tsx`, que mide justo el espacio que ocupa este bloque). */
+@media (max-width: 480px) {
+  .touch-controls {
+    gap: 24px;
+    margin-top: 12px;
+    padding: 4px 12px;
+  }
+  .touch-dpad {
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+  }
+  .touch-btn {
+    width: 48px;
+    height: 48px;
+    font-size: 15px;
+  }
+  .touch-btn-pause {
+    width: 38px;
+    height: 38px;
+    font-size: 11px;
+  }
 }

@@ -13,11 +13,21 @@ import {
   withAlpha,
   writeSkin,
 } from "@/components/games/skins";
+import TouchControls, {
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const W = 800;
 const H = 600;
 
 const SKIN_LIST = Object.values(SKINS);
+
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowLeft", label: "◀", mode: "hold", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "hold", slot: "dpad-right" },
+  { code: "ArrowUp", label: "▲", mode: "hold", slot: "dpad-up" },
+  { code: "Space", label: "🔥", mode: "hold", slot: "action-1" },
+];
 
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -671,15 +681,11 @@ export default function AsteroidsGame() {
 
   return (
     <>
-      <div style={{ width: W, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+      <div
+        className="game-canvas-wrap"
+        style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
+      >
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -693,6 +699,25 @@ export default function AsteroidsGame() {
           ))}
         </div>
         <canvas ref={canvasRef} width={W} height={H} />
+        <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
+            dos funciones relevantes durante el juego reaparecen acá. */}
+        <div className="game-bottom-bar">
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+          <Link href="/games" className="btn ghost">
+            REGRESAR
+          </Link>
+        </div>
       </div>
       {finalScore !== null && (
         <div className="modal-bd">

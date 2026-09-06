@@ -42,18 +42,36 @@ export type TouchControlsProps = {
 const HOLD_INITIAL_DELAY = 250;
 const HOLD_REPEAT_INTERVAL = 50;
 
+// Se despacha en `document`, no en `window`: Arkanoid/Snake/Asteroids
+// escuchan en `window`, pero Tetris escucha en `document`. Un evento
+// despachado en `document` con `bubbles: true` sí llega a los listeners de
+// `window` (sube por la cadena de burbujeo document → window), pero uno
+// despachado en `window` nunca llega a los de `document` (no hay a dónde
+// burbujear desde ahí) — por eso los botones no movían nada en Tetris.
 function dispatchKey(type: "keydown" | "keyup", code: string) {
-  window.dispatchEvent(new KeyboardEvent(type, { code }));
+  document.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
 }
 
-/** Detecta soporte táctil real una vez al montar. `false` en SSR. */
+/**
+ * Detecta si el dispositivo es táctil una vez al montar. `false` en SSR.
+ *
+ * No usa `"ontouchstart" in window`/`navigator.maxTouchPoints` — esos dos
+ * también dan `true` en una notebook con pantalla táctil (Windows, 2-en-1)
+ * cuya entrada *principal* sigue siendo mouse/trackpad, mostrando de
+ * entrada los controles y el bloqueo de landscape pensados para un celular
+ * en una notebook de escritorio normal. `(pointer: coarse)` refleja el
+ * dispositivo de entrada *principal*: verdadero en un celular/tablet (no
+ * tienen otra entrada), falso en una notebook táctil con mouse/trackpad
+ * (esa sigue siendo la principal), aunque `maxTouchPoints` sea > 0 en
+ * ambos casos.
+ */
 function useTouchSupport(): boolean {
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
     setSupported(
-      "ontouchstart" in window ||
-        (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0),
+      typeof window.matchMedia === "function" &&
+        window.matchMedia("(pointer: coarse)").matches,
     );
   }, []);
 

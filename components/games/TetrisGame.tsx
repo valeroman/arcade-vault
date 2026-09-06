@@ -15,6 +15,9 @@ import {
   readSkin,
   writeSkin,
 } from "@/components/games/skins";
+import TouchControls, {
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const BOARD_W = 300;
 const BOARD_H = 600;
@@ -22,9 +25,20 @@ const NEXT_SIZE = 120;
 
 const SKIN_LIST = Object.values(SKINS);
 
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowLeft", label: "◀", mode: "hold", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "hold", slot: "dpad-right" },
+  { code: "ArrowDown", label: "▼", mode: "hold", slot: "dpad-down" },
+  { code: "ArrowUp", label: "⟳", mode: "tap", slot: "action-1" },
+  { code: "Space", label: "⤓", mode: "tap", slot: "action-2" },
+  { code: "KeyP", label: "⏸", mode: "tap", slot: "pause" },
+];
+
 export default function TetrisGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextCanvasRef = useRef<HTMLCanvasElement>(null);
+  const boardRowRef = useRef<HTMLDivElement>(null);
+  const bottomBarRef = useRef<HTMLDivElement>(null);
   const restartRef = useRef<(() => void) | null>(null);
   const handleRef = useRef<EngineHandle | null>(null);
 
@@ -96,19 +110,78 @@ export default function TetrisGame() {
     };
   }, []);
 
+  // Ajusta el alto del tablero cuando el layout está apilado (mobile, o una
+  // ventana de escritorio angosta — el mismo caso que ya apila
+  // `.tetris-board-row` vía CSS): el tablero (300×600, relación 1:2) es
+  // angosto y muy alto, y ni en portrait entra completo junto con el aside
+  // de stats/preview y los controles debajo. En vez de un cálculo de CSS
+  // (frágil: un intento con flexbox no resolvía el porcentaje de alto
+  // contra un contenedor dos niveles más arriba, y un número de píxeles
+  // fijo ya nos salió mal varias veces con los otros juegos), se mide el
+  // espacio real disponible con `getBoundingClientRect` — la distancia
+  // desde donde empieza el canvas hasta el final de la barra inferior es,
+  // por construcción, exactamente lo que ocupan el aside + los controles +
+  // la barra, sin importar el alto actual del propio canvas.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const nextCanvas = nextCanvasRef.current;
+    const boardRow = boardRowRef.current;
+    const bottomBar = bottomBarRef.current;
+    if (!canvas || !nextCanvas || !boardRow || !bottomBar) return;
+
+    function fitBoard() {
+      const stacked = getComputedStyle(boardRow!).flexDirection === "column";
+      if (!stacked) {
+        canvas!.style.maxHeight = "";
+        // Vuelve al tamaño del atributo HTML (NEXT_SIZE): en desktop el
+        // aside ya reserva 140px de sobra para el preview a tamaño real.
+        nextCanvas!.style.width = "";
+        nextCanvas!.style.height = "";
+        return;
+      }
+      const canvasRect = canvas!.getBoundingClientRect();
+      const bottomBarRect = bottomBar!.getBoundingClientRect();
+      const viewportHeight =
+        window.visualViewport?.height ?? window.innerHeight;
+      const spaceAbove = canvasRect.top;
+      const spaceBelow = bottomBarRect.bottom - canvasRect.bottom;
+      // Margen de seguridad chico (padding inferior de `.game-screen`, etc.)
+      // para no dejar ni un pixel de scroll.
+      const available = viewportHeight - spaceAbove - spaceBelow - 16;
+      const boardHeight = Math.max(120, Math.min(BOARD_H, available));
+      canvas!.style.maxHeight = `${boardHeight}px`;
+
+      // El preview de la próxima pieza debe verse a la MISMA escala que el
+      // tablero (cada bloque, el mismo tamaño en los dos lados) — no un
+      // tamaño de CSS fijo, que quedaba grande o chico según cuánto se
+      // haya achicado el tablero. Misma proporción que el tablero
+      // (boardHeight / BOARD_H) aplicada al tamaño nativo del preview.
+      const scale = boardHeight / BOARD_H;
+      const nextSize = Math.round(NEXT_SIZE * scale);
+      nextCanvas!.style.width = `${nextSize}px`;
+      nextCanvas!.style.height = `${nextSize}px`;
+    }
+
+    fitBoard();
+    window.addEventListener("resize", fitBoard);
+    window.addEventListener("orientationchange", fitBoard);
+    const ro = new ResizeObserver(fitBoard);
+    ro.observe(boardRow);
+    ro.observe(bottomBar);
+
+    return () => {
+      window.removeEventListener("resize", fitBoard);
+      window.removeEventListener("orientationchange", fitBoard);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <>
       {/* La página centra con flex en fila: sin este contenedor, los chips
           quedarían al lado del tablero en vez de encima. */}
-      <div>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+      <div className="tetris-layout">
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -122,18 +195,11 @@ export default function TetrisGame() {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+        <div className="tetris-board-row" ref={boardRowRef}>
           <canvas ref={canvasRef} width={BOARD_W} height={BOARD_H} />
 
-          <aside
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
-              width: 140,
-            }}
-          >
-            <div className="stat-strip" style={{ gridTemplateColumns: "1fr" }}>
+          <aside className="tetris-aside">
+            <div className="stat-strip">
               <div>
                 <div className="l">SCORE</div>
                 <div className="v">{hud.score.toLocaleString("es-ES")}</div>
@@ -165,6 +231,7 @@ export default function TetrisGame() {
                 ref={nextCanvasRef}
                 width={NEXT_SIZE}
                 height={NEXT_SIZE}
+                className="tetris-next-canvas"
                 style={{
                   background: "var(--bg-2)",
                   border: "1px solid var(--line)",
@@ -172,6 +239,26 @@ export default function TetrisGame() {
               />
             </div>
           </aside>
+        </div>
+
+        <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
+            dos funciones relevantes durante el juego reaparecen acá. */}
+        <div className="game-bottom-bar" ref={bottomBarRef}>
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+          <Link href="/games" className="btn ghost">
+            REGRESAR
+          </Link>
         </div>
       </div>
 

@@ -14,11 +14,20 @@ import {
   writeSkin,
   type SkinId,
 } from "@/components/games/skins";
+import TouchControls, {
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const W = 800;
 const H = 600;
 
 const SKIN_LIST = Object.values(SKINS);
+
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowLeft", label: "◀", mode: "hold", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "hold", slot: "dpad-right" },
+  { code: "KeyP", label: "⏸", mode: "tap", slot: "pause" },
+];
 
 export default function ArkanoidGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -90,7 +99,10 @@ export default function ArkanoidGame() {
 
   return (
     <>
-      <div style={{ width: W, margin: "0 auto" }}>
+      <div
+        className="game-canvas-wrap"
+        style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
+      >
         <div
           style={{
             display: "flex",
@@ -112,6 +124,7 @@ export default function ArkanoidGame() {
           ))}
         </div>
         <canvas ref={canvasRef} width={W} height={H} />
+        <TouchControls buttons={TOUCH_BUTTONS} />
       </div>
 
       {finalScore !== null && (

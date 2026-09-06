@@ -2805,3 +2805,155 @@ a {
 .term-body .caret {
   animation: blink 1s steps(1) infinite;
 }
+
+/* ===== mobile touch controls (spec 10) ===== */
+
+/* Escalado responsive de los 4 canvas: en desktop `max-width` iguala al ancho
+   fijo de siempre (cero cambio visual); bajo ese ancho, el canvas encoge sin
+   tocar su resolución interna (atributos width/height del elemento). */
+.game-canvas-wrap {
+  max-width: var(--canvas-max-w, 800px);
+  width: 100%;
+  margin: 0 auto;
+  touch-action: none;
+}
+.game-canvas-wrap canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Tetris: layout propio (canvas + aside de preview/stats lado a lado en
+   desktop) en vez de `.game-canvas-wrap`, porque necesita apilarse en
+   viewports angostos sin afectar a los otros 3 juegos. */
+.tetris-layout {
+  max-width: var(--canvas-max-w, 464px);
+  width: 100%;
+  margin: 0 auto;
+}
+.tetris-board-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  touch-action: none;
+}
+.tetris-board-row canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+@media (max-width: 480px) {
+  .tetris-board-row {
+    flex-direction: column;
+  }
+  .tetris-board-row aside {
+    width: 100%;
+  }
+}
+
+/* Botonera táctil compartida (`TouchControls.tsx`). Se apila debajo del
+   canvas en el flujo normal del documento — nunca se superpone al HUD ni al
+   preview de Tetris. */
+.touch-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 4px 12px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.touch-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
+  grid-template-areas:
+    ".    up    ."
+    "left .     right"
+    ".    down  .";
+  gap: 4px;
+}
+.touch-btn-dpad-up {
+  grid-area: up;
+}
+.touch-btn-dpad-down {
+  grid-area: down;
+}
+.touch-btn-dpad-left {
+  grid-area: left;
+}
+.touch-btn-dpad-right {
+  grid-area: right;
+}
+
+.touch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.touch-btn {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel);
+  font-size: 16px;
+  color: var(--cyan);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-btn:active {
+  background: rgba(0, 245, 255, 0.18);
+  box-shadow: 0 0 14px rgba(0, 245, 255, 0.5);
+}
+.touch-btn-pause {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+/* Aviso de rotación: oculto salvo en portrait (y el componente que lo
+   contiene ya solo se monta con soporte táctil real). */
+.rotate-hint {
+  display: none;
+}
+@media (orientation: portrait) {
+  .rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--pixel);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+  .rotate-hint > div:first-child {
+    font-size: 48px;
+    animation: rotate-hint-spin 1.6s ease-in-out infinite;
+  }
+}
+@keyframes rotate-hint-spin {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(90deg);
+  }
+}

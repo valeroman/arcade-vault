@@ -113,22 +113,45 @@ function TouchButtonEl({ button }: { button: TouchButton }) {
 export default function TouchControls({ buttons }: TouchControlsProps) {
   const touchSupported = useTouchSupport();
 
+  // Marca el <body> mientras esta pantalla de juego está montada en un
+  // dispositivo táctil real — la misma detección que ya gatea este
+  // componente, reusada por `app/globals.css` para ocultar Nav/Footer y
+  // mover los chips de skin a la barra inferior. Evita depender de una
+  // media query CSS aparte (`hover`/`pointer`) que podría no coincidir
+  // exactamente con esta detección en algunos navegadores móviles.
+  useEffect(() => {
+    document.body.classList.toggle("av-touch-game", touchSupported);
+    return () => {
+      document.body.classList.remove("av-touch-game");
+    };
+  }, [touchSupported]);
+
   // Sin soporte táctil real, el componente no renderiza nada: cero cambios
   // visuales ni de comportamiento en desktop/teclado físico.
   if (!touchSupported) return null;
 
   const dpadButtons = buttons.filter((b) => b.slot.startsWith("dpad-"));
   const actionButtons = buttons.filter((b) => !b.slot.startsWith("dpad-"));
+  // Cruz de 4 direcciones (Snake, Tetris) vs. fila simple (Arkanoid, que solo
+  // usa izquierda/derecha; Asteroids, que no usa abajo): sin arriba/abajo no
+  // hace falta la grilla completa, una fila centrada se ve mejor.
+  const dpadIsCross = dpadButtons.some(
+    (b) => b.slot === "dpad-up" || b.slot === "dpad-down",
+  );
 
   return (
     <>
-      <div className="rotate-hint">
+      {/* Los 4 juegos solo se juegan en portrait: en landscape, este overlay
+          (solo visible en dispositivos táctiles — el componente entero ya
+          está gateado por `touchSupported`) tapa todo pidiendo volver a
+          vertical, en vez de invertir en un layout landscape aparte. */}
+      <div className="landscape-block">
         <div>⟳</div>
-        <div>GIRA TU DISPOSITIVO PARA JUGAR</div>
+        <div>GIRA TU DISPOSITIVO A VERTICAL PARA JUGAR</div>
       </div>
       <div className="touch-controls">
         {dpadButtons.length > 0 && (
-          <div className="touch-dpad">
+          <div className={dpadIsCross ? "touch-dpad" : "touch-dpad-row"}>
             {dpadButtons.map((button) => (
               <TouchButtonEl key={button.slot} button={button} />
             ))}

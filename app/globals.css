@@ -2808,6 +2808,60 @@ a {
 
 /* ===== mobile touch controls (spec 10) ===== */
 
+/* Wrapper de cada page.tsx de ruta de juego (`app/games/<slug>/page.tsx`).
+   El padding se define acá (no inline) para poder recortarlo en táctil —
+   ver regla de Nav/Footer más abajo. */
+.game-screen {
+  padding: 24px 0;
+}
+
+/* `body.av-touch-game` lo pone/saca `TouchControls.tsx` (mismo hook
+   `useTouchSupport()` que ya gatea sus propios botones) mientras una
+   pantalla de juego está montada en un dispositivo táctil real — evita
+   depender de una media query CSS aparte (`hover`/`pointer` o `:has()`) que
+   podría no coincidir exactamente con esa detección en algunos navegadores
+   móviles. Nav (sticky) + Footer no aportan nada durante la partida y le
+   restan alto útil al canvas. Sus dos funciones relevantes (cambiar skin,
+   volver al catálogo) reaparecen en la barra inferior táctil
+   (`.game-bottom-bar`, más abajo). En desktop no cambia nada. */
+body.av-touch-game .game-screen {
+  padding: 8px 0;
+}
+body.av-touch-game .av-nav,
+body.av-touch-game footer {
+  display: none;
+}
+
+/* Fila de chips de skin arriba del canvas: solo tiene sentido en desktop,
+   donde el Nav (con sus propios links) sigue visible. En táctil se oculta —
+   reaparece, junto con "volver", en `.game-bottom-bar`. */
+.skin-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+body.av-touch-game .skin-row {
+  display: none;
+}
+
+/* Barra inferior táctil: mismos chips de skin + un botón para volver al
+   catálogo, ya que el Nav de arriba está oculto en este mismo modo. Oculta
+   en desktop (esas funciones ya están arriba, en el Nav / la fila de chips
+   de siempre). */
+.game-bottom-bar {
+  display: none;
+}
+body.av-touch-game .game-bottom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 0 12px;
+}
+
 /* Escalado responsive de los 4 canvas: en desktop `max-width` iguala al ancho
    fijo de siempre (cero cambio visual); bajo ese ancho, el canvas encoge sin
    tocar su resolución interna (atributos width/height del elemento). */
@@ -2821,6 +2875,46 @@ a {
   max-width: 100%;
   height: auto;
   display: block;
+}
+
+/* Los 4 juegos son portrait-only en táctil: `.landscape-block` (dentro de
+   `TouchControls`, ver `components/games/TouchControls.tsx`) tapa toda la
+   pantalla en landscape, así que el canvas nunca necesita un ajuste de alto
+   especial para ese caso — solo escala por ancho, como en desktop. */
+.landscape-block {
+  display: none;
+}
+@media (orientation: landscape) {
+  .landscape-block {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--cyan);
+    font-family: var(--pixel);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+  .landscape-block > div:first-child {
+    font-size: 48px;
+    animation: landscape-block-spin 1.6s ease-in-out infinite;
+  }
+}
+@keyframes landscape-block-spin {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(90deg);
+  }
 }
 
 /* Tetris: layout propio (canvas + aside de preview/stats lado a lado en
@@ -2853,19 +2947,21 @@ a {
 
 /* Botonera táctil compartida (`TouchControls.tsx`). Se apila debajo del
    canvas en el flujo normal del documento — nunca se superpone al HUD ni al
-   preview de Tetris. */
+   preview de Tetris. Centrada como un gamepad, no pegada a los bordes. */
 .touch-controls {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
   margin-top: 20px;
-  padding: 4px 12px;
+  padding: 8px 12px;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
+/* Cruz de 4 direcciones: Snake (las 4), Tetris (izq/der/abajo) y Asteroids
+   (izq/der/arriba) — cualquier combinación que incluya arriba o abajo. */
 .touch-dpad {
   display: grid;
   grid-template-columns: repeat(3, 56px);
@@ -2874,7 +2970,7 @@ a {
     ".    up    ."
     "left .     right"
     ".    down  .";
-  gap: 4px;
+  gap: 6px;
 }
 .touch-btn-dpad-up {
   grid-area: up;
@@ -2889,71 +2985,62 @@ a {
   grid-area: right;
 }
 
+/* Fila simple: juegos que solo usan izquierda/derecha (Arkanoid). Sin la
+   grilla completa, para no dejar huecos arriba/abajo de los botones. */
+.touch-dpad-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .touch-actions {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  align-items: flex-end;
+  align-items: center;
+  gap: 16px;
 }
 
 .touch-btn {
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--pixel);
-  font-size: 16px;
+  font-size: 18px;
   color: var(--cyan);
   background: var(--bg-2);
-  border: 1px solid var(--line);
+  border: 2px solid var(--cyan);
   border-radius: 50%;
+  box-shadow:
+    0 0 10px rgba(0, 245, 255, 0.2),
+    inset 0 0 8px rgba(0, 245, 255, 0.08);
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background 120ms,
+    box-shadow 120ms,
+    transform 80ms;
 }
 .touch-btn:active {
-  background: rgba(0, 245, 255, 0.18);
-  box-shadow: 0 0 14px rgba(0, 245, 255, 0.5);
+  background: rgba(0, 245, 255, 0.2);
+  box-shadow:
+    0 0 18px rgba(0, 245, 255, 0.6),
+    inset 0 0 10px rgba(0, 245, 255, 0.35);
+  transform: scale(0.94);
 }
 .touch-btn-pause {
+  width: 46px;
+  height: 46px;
+  font-size: 13px;
   border-color: var(--yellow);
   color: var(--yellow);
+  box-shadow:
+    0 0 10px rgba(245, 255, 0, 0.2),
+    inset 0 0 8px rgba(245, 255, 0, 0.08);
 }
-
-/* Aviso de rotación: oculto salvo en portrait (y el componente que lo
-   contiene ya solo se monta con soporte táctil real). */
-.rotate-hint {
-  display: none;
-}
-@media (orientation: portrait) {
-  .rotate-hint {
-    position: fixed;
-    inset: 0;
-    z-index: 999;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 24px;
-    background: var(--bg);
-    color: var(--cyan);
-    font-family: var(--pixel);
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    text-align: center;
-  }
-  .rotate-hint > div:first-child {
-    font-size: 48px;
-    animation: rotate-hint-spin 1.6s ease-in-out infinite;
-  }
-}
-@keyframes rotate-hint-spin {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(90deg);
-  }
+.touch-btn-pause:active {
+  background: rgba(245, 255, 0, 0.2);
+  box-shadow:
+    0 0 18px rgba(245, 255, 0, 0.55),
+    inset 0 0 10px rgba(245, 255, 0, 0.35);
 }

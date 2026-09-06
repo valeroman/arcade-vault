@@ -11,11 +11,22 @@ import {
   readSkin,
   writeSkin,
 } from "@/components/games/skins";
+import TouchControls, {
+  type TouchButton,
+} from "@/components/games/TouchControls";
 
 const W = 600;
 const H = 600;
 
 const SKIN_LIST = Object.values(SKINS);
+
+const TOUCH_BUTTONS: TouchButton[] = [
+  { code: "ArrowUp", label: "▲", mode: "tap", slot: "dpad-up" },
+  { code: "ArrowDown", label: "▼", mode: "tap", slot: "dpad-down" },
+  { code: "ArrowLeft", label: "◀", mode: "tap", slot: "dpad-left" },
+  { code: "ArrowRight", label: "▶", mode: "tap", slot: "dpad-right" },
+  { code: "KeyP", label: "⏸", mode: "tap", slot: "pause" },
+];
 
 export default function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -88,15 +99,11 @@ export default function SnakeGame() {
 
   return (
     <>
-      <div style={{ width: W, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+      <div
+        className="game-canvas-wrap"
+        style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
+      >
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -110,6 +117,25 @@ export default function SnakeGame() {
           ))}
         </div>
         <canvas ref={canvasRef} width={W} height={H} />
+        <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
+            dos funciones relevantes durante el juego reaparecen acá. */}
+        <div className="game-bottom-bar">
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+          <Link href="/games" className="btn ghost">
+            REGRESAR
+          </Link>
+        </div>
       </div>
 
       {finalScore !== null && (

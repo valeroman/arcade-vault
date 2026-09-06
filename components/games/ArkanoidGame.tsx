@@ -103,14 +103,7 @@ export default function ArkanoidGame() {
         className="game-canvas-wrap"
         style={{ "--canvas-max-w": `${W}px` } as React.CSSProperties}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            justifyContent: "flex-end",
-            marginBottom: 10,
-          }}
-        >
+        <div className="skin-row">
           {SKIN_LIST.map((skin) => (
             <button
               key={skin.id}
@@ -125,6 +118,24 @@ export default function ArkanoidGame() {
         </div>
         <canvas ref={canvasRef} width={W} height={H} />
         <TouchControls buttons={TOUCH_BUTTONS} />
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
+            dos funciones relevantes durante el juego reaparecen acá. */}
+        <div className="game-bottom-bar">
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+          <Link href="/games" className="btn ghost">
+            REGRESAR
+          </Link>
+        </div>
       </div>
 
       {finalScore !== null && (

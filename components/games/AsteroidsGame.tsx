@@ -3,13 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { submitScore } from "@/app/data/scores";
+import {
+  DEFAULT_SKIN,
+  SKINS,
+  type Skin,
+  type SkinId,
+  getSkin,
+  readSkin,
+  withAlpha,
+  writeSkin,
+} from "@/components/games/skins";
 
 const W = 800;
 const H = 600;
 
+const SKIN_LIST = Object.values(SKINS);
+
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const restartRef = useRef<(() => void) | null>(null);
+
+  // El motor de Asteroids sigue inline (ver "Known deviations"), así que la skin
+  // activa vive en una ref mutable que cada draw() lee: cambiarla no remonta el
+  // componente ni reinicia la partida.
+  const skinRef = useRef<Skin>(getSkin(DEFAULT_SKIN));
+  const [skinId, setSkinId] = useState<SkinId>(DEFAULT_SKIN);
+
+  // Se sincroniza tras el montaje para no desalinear el HTML del servidor.
+  useEffect(() => {
+    const stored = readSkin();
+    skinRef.current = getSkin(stored);
+    setSkinId(stored);
+  }, []);
+
+  const handleSkin = (id: SkinId) => {
+    writeSkin(id);
+    skinRef.current = getSkin(id);
+    setSkinId(id);
+  };
 
   const [finalScore, setFinalScore] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -42,6 +73,10 @@ export default function AsteroidsGame() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // ── Skin ──────────────────────────────────────────────────────────────
+    // Paleta activa, leída en cada frame desde la ref mutable del componente.
+    const palette = () => skinRef.current;
 
     // ── Input ─────────────────────────────────────────────────────────────
     const keys: Record<string, boolean> = {};
@@ -108,7 +143,7 @@ export default function AsteroidsGame() {
       }
 
       draw() {
-        ctx!.fillStyle = "#fff";
+        ctx!.fillStyle = palette().fg;
         ctx!.beginPath();
         ctx!.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx!.fill();
@@ -174,7 +209,9 @@ export default function AsteroidsGame() {
         ctx!.save();
         ctx!.translate(this.x, this.y);
         ctx!.rotate(this.rot);
-        ctx!.strokeStyle = "#fff";
+        // El tamaño (1..3) indexa la paleta rotatoria de la skin.
+        ctx!.strokeStyle =
+          palette().entities[this.size - 1] ?? palette().entities[0];
         ctx!.lineWidth = 1.5;
         ctx!.lineJoin = "round";
         ctx!.beginPath();
@@ -222,12 +259,12 @@ export default function AsteroidsGame() {
         ctx!.save();
         ctx!.translate(this.x, this.y);
         ctx!.rotate(Math.PI / 4);
-        ctx!.strokeStyle = "#0ff";
+        ctx!.strokeStyle = palette().grid;
         ctx!.lineWidth = 2;
         const r = this.radius * pulse;
         ctx!.strokeRect(-r, -r, r * 2, r * 2);
         ctx!.restore();
-        ctx!.fillStyle = "#0ff";
+        ctx!.fillStyle = palette().accent;
         ctx!.font = "bold 12px monospace";
         ctx!.textAlign = "center";
         ctx!.textBaseline = "middle";
@@ -317,7 +354,7 @@ export default function AsteroidsGame() {
         ctx!.save();
         ctx!.translate(this.x, this.y);
         ctx!.rotate(this.angle);
-        ctx!.strokeStyle = "#fff";
+        ctx!.strokeStyle = palette().fg;
         ctx!.lineWidth = 1.5;
         ctx!.lineJoin = "round";
 
@@ -336,7 +373,7 @@ export default function AsteroidsGame() {
           ctx!.moveTo(-8, -4);
           ctx!.lineTo(-8 - rand(6, 14), 0);
           ctx!.lineTo(-8, 4);
-          ctx!.strokeStyle = "rgba(255, 130, 0, 0.85)";
+          ctx!.strokeStyle = palette().accent2;
           ctx!.stroke();
         }
 
@@ -375,7 +412,7 @@ export default function AsteroidsGame() {
 
       draw() {
         const alpha = this.ttl / this.life;
-        ctx!.strokeStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+        ctx!.strokeStyle = withAlpha(palette().fg, alpha);
         ctx!.lineWidth = 1;
         ctx!.beginPath();
         ctx!.moveTo(this.x, this.y);
@@ -544,7 +581,7 @@ export default function AsteroidsGame() {
       ctx!.save();
       ctx!.translate(x, y);
       ctx!.rotate(-Math.PI / 2);
-      ctx!.strokeStyle = "#fff";
+      ctx!.strokeStyle = palette().fg;
       ctx!.lineWidth = 1.2;
       ctx!.lineJoin = "round";
       ctx!.beginPath();
@@ -558,7 +595,7 @@ export default function AsteroidsGame() {
     }
 
     function drawHUD() {
-      ctx!.fillStyle = "#fff";
+      ctx!.fillStyle = palette().fg;
       ctx!.font = "15px monospace";
 
       ctx!.textAlign = "left";
@@ -571,23 +608,27 @@ export default function AsteroidsGame() {
 
       if (ship.tripleShot > 0) {
         ctx!.textAlign = "left";
-        ctx!.fillStyle = "#0ff";
+        ctx!.fillStyle = palette().accent;
         ctx!.fillText(`3x  ${ship.tripleShot.toFixed(1)}s`, 14, 46);
       }
     }
 
     function drawOverlay(title: string, sub: string) {
+      // En `clasico` el velo es transparente: el original no oscurecía la escena.
+      ctx!.fillStyle = palette().overlay;
+      ctx!.fillRect(0, 0, W, H);
+
       ctx!.textAlign = "center";
-      ctx!.fillStyle = "#fff";
+      ctx!.fillStyle = palette().fg;
       ctx!.font = "bold 46px monospace";
       ctx!.fillText(title, W / 2, H / 2 - 18);
       ctx!.font = "18px monospace";
-      ctx!.fillStyle = "rgba(255,255,255,0.65)";
+      ctx!.fillStyle = palette().dim;
       ctx!.fillText(sub, W / 2, H / 2 + 22);
     }
 
     function draw() {
-      ctx!.fillStyle = "#000";
+      ctx!.fillStyle = palette().bg;
       ctx!.fillRect(0, 0, W, H);
 
       particles.forEach((p) => p.draw());
@@ -630,7 +671,29 @@ export default function AsteroidsGame() {
 
   return (
     <>
-      <canvas ref={canvasRef} width={W} height={H} />
+      <div style={{ width: W, margin: "0 auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            marginBottom: 10,
+          }}
+        >
+          {SKIN_LIST.map((skin) => (
+            <button
+              key={skin.id}
+              type="button"
+              className={"chip" + (skinId === skin.id ? " active" : "")}
+              aria-pressed={skinId === skin.id}
+              onClick={() => handleSkin(skin.id)}
+            >
+              {skin.label}
+            </button>
+          ))}
+        </div>
+        <canvas ref={canvasRef} width={W} height={H} />
+      </div>
       {finalScore !== null && (
         <div className="modal-bd">
           <div className="modal">

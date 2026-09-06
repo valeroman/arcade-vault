@@ -13,14 +13,19 @@ import {
   EXPLOSION_DURATION,
   type BlockColor,
 } from "./sprites";
+import { getSkin, type Skin, type SkinId } from "../skins";
 
 export type EngineCallbacks = {
   onGameOver: (score: number) => void;
+  /** Skin inicial. Si falta, arranca en `clasico`. */
+  skin?: SkinId;
 };
 
 export type EngineHandle = {
   restart: () => void;
   destroy: () => void;
+  /** Cambia la skin en caliente: no reinicia la partida ni toca el estado. */
+  setSkin: (id: SkinId) => void;
 };
 
 const W = 800;
@@ -161,6 +166,8 @@ export function createGame(
   let currentLevel = 1;
   let isPaused = false;
   let destroyed = false;
+  // Solo color: la skin no entra en update(), solo en draw().
+  let skin: Skin = getSkin(cb.skin, "ladrillos");
   let rafId = 0;
   let lastTime: number | null = null;
 
@@ -311,9 +318,9 @@ export function createGame(
   }
 
   function drawOverlay(message: string) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillStyle = skin.overlay;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.font = "bold 64px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -321,7 +328,7 @@ export function createGame(
   }
 
   function draw() {
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = skin.bg;
     ctx.fillRect(0, 0, W, H);
 
     for (const block of blocks) {
@@ -333,6 +340,7 @@ export function createGame(
           block.y,
           block.w,
           block.h,
+          skin,
         );
     }
 
@@ -348,14 +356,15 @@ export function createGame(
         exp.y,
         exp.w,
         exp.h,
+        skin,
       );
     }
 
-    drawSprite(ctx, "paddle", paddle.x, paddle.y, paddle.w, paddle.h);
-    drawSprite(ctx, "ball", ball.x, ball.y, ball.w, ball.h);
+    drawSprite(ctx, "paddle", paddle.x, paddle.y, paddle.w, paddle.h, skin);
+    drawSprite(ctx, "ball", ball.x, ball.y, ball.w, ball.h, skin);
 
     if (gameState === "playing") {
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = skin.fg;
       ctx.font = "bold 18px monospace";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
@@ -366,7 +375,7 @@ export function createGame(
       const ballSpacing = 4;
       for (let i = 0; i < lives; i++) {
         const bx = W - 10 - (lives - i) * (ballSize + ballSpacing);
-        drawSprite(ctx, "ball", bx, 10, ballSize, ballSize);
+        drawSprite(ctx, "ball", bx, 10, ballSize, ballSize, skin);
       }
     }
 
@@ -406,6 +415,9 @@ export function createGame(
   return {
     restart: () => {
       initGame();
+    },
+    setSkin: (id: SkinId) => {
+      skin = getSkin(id, "ladrillos");
     },
     destroy: () => {
       destroyed = true;

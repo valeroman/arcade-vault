@@ -698,24 +698,33 @@ export default function AsteroidsGame() {
             </button>
           ))}
         </div>
-        <canvas ref={canvasRef} width={W} height={H} />
+        <div className="game-crt">
+          <div className="game-crt-screen">
+            <canvas ref={canvasRef} width={W} height={H} />
+          </div>
+          <div className="game-crt-bottom">
+            <span className="led">SEÑAL ROCAS</span>
+            <span>CRT-83 · 60HZ</span>
+          </div>
+        </div>
         <TouchControls buttons={TOUCH_BUTTONS} />
-        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): sus
-            dos funciones relevantes durante el juego reaparecen acá. */}
+        {/* Nav queda oculto en táctil (ver .game-screen en globals.css): su
+            función relevante durante el juego (cambiar skin) reaparece acá.
+            Sin pausa: Asteroids no tiene esa mecánica. */}
         <div className="game-bottom-bar">
-          {SKIN_LIST.map((skin) => (
-            <button
-              key={skin.id}
-              type="button"
-              className={"chip" + (skinId === skin.id ? " active" : "")}
-              aria-pressed={skinId === skin.id}
-              onClick={() => handleSkin(skin.id)}
-            >
-              {skin.label}
-            </button>
-          ))}
+          <select
+            className="skin-select"
+            value={skinId}
+            onChange={(e) => handleSkin(e.target.value as SkinId)}
+          >
+            {SKIN_LIST.map((skin) => (
+              <option key={skin.id} value={skin.id}>
+                {skin.label}
+              </option>
+            ))}
+          </select>
           <Link href="/games" className="btn ghost">
-            REGRESAR
+            ← SALIR
           </Link>
         </div>
       </div>

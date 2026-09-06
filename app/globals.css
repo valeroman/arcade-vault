@@ -3075,21 +3075,37 @@ body.av-touch-game .game-bottom-bar {
     inset 0 0 10px rgba(0, 245, 255, 0.35);
   transform: scale(0.94);
 }
-.touch-btn-pause {
-  width: 46px;
-  height: 46px;
-  font-size: 13px;
-  border-color: var(--yellow);
-  color: var(--yellow);
-  box-shadow:
-    0 0 10px rgba(245, 255, 0, 0.2),
-    inset 0 0 8px rgba(245, 255, 0, 0.08);
+
+/* El d-pad usa botones cuadrados (look de gamepad físico); los de acción
+   siguen circulares, como ya estaban. */
+.touch-dpad .touch-btn,
+.touch-dpad-row .touch-btn {
+  border-radius: 10px;
 }
-.touch-btn-pause:active {
-  background: rgba(245, 255, 0, 0.2);
+
+/* Los botones de acción (disparo, rotar, hard-drop) son más grandes que los
+   de movimiento — la pausa ya no vive acá, se mudó a `.pause-pill` en la
+   barra inferior (ver diseño "bisel CRT"). */
+.touch-actions .touch-btn {
+  width: 68px;
+  height: 68px;
+  font-size: 22px;
+}
+/* Cuando hay dos acciones (p. ej. rotar + hard-drop en Tetris), la segunda
+   en magenta — distingue una de otra de un vistazo, como los "A"/"B" de un
+   gamepad clásico. Asteroids, con una sola, se queda en cian por defecto. */
+.touch-btn-action-2 {
+  border-color: var(--magenta);
+  color: var(--magenta);
   box-shadow:
-    0 0 18px rgba(245, 255, 0, 0.55),
-    inset 0 0 10px rgba(245, 255, 0, 0.35);
+    0 0 10px rgba(255, 0, 110, 0.2),
+    inset 0 0 8px rgba(255, 0, 110, 0.08);
+}
+.touch-btn-action-2:active {
+  background: rgba(255, 0, 110, 0.2);
+  box-shadow:
+    0 0 18px rgba(255, 0, 110, 0.55),
+    inset 0 0 10px rgba(255, 0, 110, 0.35);
 }
 
 /* En viewports angostos, más chicos y más juntos: en Tetris cada pixel de
@@ -3110,9 +3126,119 @@ body.av-touch-game .game-bottom-bar {
     height: 48px;
     font-size: 15px;
   }
-  .touch-btn-pause {
-    width: 38px;
-    height: 38px;
-    font-size: 11px;
+  .touch-actions .touch-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 18px;
   }
+}
+
+/* Botón de pausa reubicado en la barra inferior (pastilla con texto, no un
+   círculo suelto entre los de movimiento — así queda junto al selector de
+   skin y "salir", las otras dos funciones que dejó vacantes el Nav
+   oculto). */
+.pause-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--yellow);
+  background: var(--bg-2);
+  border: 1px solid var(--yellow);
+  border-radius: 6px;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pause-pill:active {
+  background: rgba(245, 255, 0, 0.18);
+  box-shadow: 0 0 12px rgba(245, 255, 0, 0.45);
+}
+
+/* Selector de skin como dropdown nativo en la barra inferior — ocupa menos
+   ancho que los 3 chips, dejando lugar a la pausa y a "salir" en la misma
+   fila. */
+.skin-select {
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 10px 10px;
+  color: var(--ink);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.skin-select:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
+/* Bisel "CRT" alrededor del canvas — mismo diseño que `.crt`/`.crt-screen`/
+   `.crt-bottom` (sin usar hoy en ningún componente), copiado en clases
+   propias en vez de reusar esas directamente: así no quedan acopladas a
+   `body.av-touch-game` si alguna otra página llega a usar `.crt` sin querer
+   este comportamiento condicional. Sin efecto en desktop — el canvas se ve
+   exactamente igual que antes de este bloque. */
+body.av-touch-game .game-crt {
+  position: relative;
+  border-radius: 22px;
+  background: #050507;
+  padding: 12px;
+  box-shadow:
+    0 0 0 5px #1b1b22,
+    0 0 0 6px #2a2a35,
+    0 20px 60px -20px rgba(0, 245, 255, 0.3);
+}
+body.av-touch-game .game-crt-screen {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  border-radius: 8px / 16px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 40px rgba(0, 0, 0, 0.9),
+    inset 0 0 14px rgba(0, 245, 255, 0.15);
+}
+body.av-touch-game .game-crt-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.18) 0 2px,
+    transparent 2px 4px
+  );
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.game-crt-bottom {
+  display: none;
+}
+body.av-touch-game .game-crt-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 0 4px;
+  font-family: var(--pixel);
+  font-size: 8px;
+  color: var(--ink-faint);
+  letter-spacing: 0.12em;
+}
+.game-crt-bottom .led {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.game-crt-bottom .led::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }

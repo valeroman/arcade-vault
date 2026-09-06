@@ -65,7 +65,7 @@ function dispatchKey(type: "keydown" | "keyup", code: string) {
  * (esa sigue siendo la principal), aunque `maxTouchPoints` sea > 0 en
  * ambos casos.
  */
-function useTouchSupport(): boolean {
+export function useTouchSupport(): boolean {
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
@@ -78,7 +78,21 @@ function useTouchSupport(): boolean {
   return supported;
 }
 
-function TouchButtonEl({ button }: { button: TouchButton }) {
+/**
+ * Un botón táctil individual, exportado para el caso de pausa: en el diseño
+ * "bisel CRT" la pausa se muda de `.touch-actions` a la barra inferior
+ * (junto al selector de skin y "salir"), fuera del layout que arma este
+ * componente — cada wrapper la ubica ahí con este mismo botón, para no
+ * duplicar la lógica de hold/tap ni el despacho de `KeyboardEvent`.
+ */
+export function TouchButtonView({
+  button,
+  className,
+}: {
+  button: TouchButton;
+  /** Reemplaza `touch-btn touch-btn-${slot}` (p. ej. `"pause-pill"`). */
+  className?: string;
+}) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -117,7 +131,7 @@ function TouchButtonEl({ button }: { button: TouchButton }) {
   return (
     <button
       type="button"
-      className={`touch-btn touch-btn-${button.slot}`}
+      className={className ?? `touch-btn touch-btn-${button.slot}`}
       aria-label={button.label}
       onTouchStart={handleStart}
       onTouchEnd={handleEnd}
@@ -149,7 +163,11 @@ export default function TouchControls({ buttons }: TouchControlsProps) {
   if (!touchSupported) return null;
 
   const dpadButtons = buttons.filter((b) => b.slot.startsWith("dpad-"));
-  const actionButtons = buttons.filter((b) => !b.slot.startsWith("dpad-"));
+  // "pause" ya no se arma acá: cada wrapper la ubica en la barra inferior
+  // con `TouchButtonView` directamente (ver diseño "bisel CRT").
+  const actionButtons = buttons.filter(
+    (b) => !b.slot.startsWith("dpad-") && b.slot !== "pause",
+  );
   // Cruz de 4 direcciones (Snake, Tetris) vs. fila simple (Arkanoid, que solo
   // usa izquierda/derecha; Asteroids, que no usa abajo): sin arriba/abajo no
   // hace falta la grilla completa, una fila centrada se ve mejor.
@@ -171,14 +189,14 @@ export default function TouchControls({ buttons }: TouchControlsProps) {
         {dpadButtons.length > 0 && (
           <div className={dpadIsCross ? "touch-dpad" : "touch-dpad-row"}>
             {dpadButtons.map((button) => (
-              <TouchButtonEl key={button.slot} button={button} />
+              <TouchButtonView key={button.slot} button={button} />
             ))}
           </div>
         )}
         {actionButtons.length > 0 && (
           <div className="touch-actions">
             {actionButtons.map((button) => (
-              <TouchButtonEl key={button.slot} button={button} />
+              <TouchButtonView key={button.slot} button={button} />
             ))}
           </div>
         )}

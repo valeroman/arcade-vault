@@ -1277,6 +1277,20 @@ a {
   margin-top: 18px;
   flex-wrap: wrap;
 }
+
+/* El modal usa `width: min(480px, 96vw)`, así que en mobile el input +
+   "GUARDAR" no entran en una sola fila: el botón, sin lugar para encogerse
+   por debajo de su ancho natural, se salía del modal. Apilados en táctil,
+   cada uno a lo ancho completo, sin ese límite. Atado a `body.av-touch-game`
+   (no a un ancho de viewport): es la misma detección que ya funciona de
+   forma confiable en el resto de esta spec. */
+body.av-touch-game .modal .input-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+body.av-touch-game .modal .input-row input {
+  flex: none;
+}
 .toast-saved {
   font-family: var(--pixel);
   font-size: 11px;

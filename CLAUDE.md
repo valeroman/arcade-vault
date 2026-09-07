@@ -101,8 +101,9 @@ Schema is hand-versioned in `supabase/schema.sql`, applied manually in the SQL E
 
 Usa siempre `/frontend-design` para diseñar la interfaz de usuario.
 
-- `/add-game <carpeta>` (p. ej. `/add-game 03-tetris`) — local skill (not tracked in `skills-lock.json`), lives in `.claude/skills/add-game/` with `template.md` and `porting-guide.md`. Analyzes a vanilla game and generates `specs/NN-slug.md` in state `Draft`, ready to approve and run with `/spec-impl`. Never writes code, SQL, or copies assets, and never marks a spec `Aprobado`.
+- `/add-game <carpeta>` (p. ej. `/add-game 03-tetris`) — local skill (not tracked in `skills-lock.json`), lives in `.claude/skills/add-game/` with `template.md` and `porting-guide.md`. Analyzes a vanilla game and generates `specs/NN-slug.md` in state `Draft`, ready to approve and run with `/spec-impl-game`. Never writes code, SQL, or copies assets, and never marks a spec `Aprobado`.
 - `/spec` and `/spec-impl` — vendored copies from `Klerith/fernando-skills`, hashes tracked in `skills-lock.json`. **Editing them by hand breaks the lock** — reinstall with `npx skills@latest add Klerith/fernando-skills`.
+- `/spec-impl-game <NN-slug>` — local skill (not tracked in `skills-lock.json`), lives in `.claude/skills/spec-impl-game/`. Delegates the implementation by reading `.claude/skills/spec-impl/SKILL.md` and running its 4 phases as-is (doesn't duplicate it — that skill is locked and `disable-model-invocation`), then verifies the acceptance criteria and chains `skin-designer <juego>` and, only after it finishes, `mobile-porter <juego>` — sequential, never parallel. Stops the chain if the state isn't `Aprobado`, a criterion fails, or the spec isn't a game's. Real cadence for a full game port: `game-planner` → `/add-game <carpeta>` → human approval → `/spec-impl-game NN-slug` (includes `skin-designer` + `mobile-porter`) → one branch = one PR.
 - `.agents/skills/` is a byte-for-byte mirror of `.claude/skills/`, and `.agents/agents/` mirrors `.claude/agents/` the same way — keep both in sync when touching a skill or agent.
 
 ## Agents

@@ -1,7 +1,7 @@
 ---
 id: 11
 title: Rediseño visual del gamepad táctil — Arcade Vault
-state: Draft
+state: Aprobado
 date: 2026-09-06
 dependencies: [10]
 ---

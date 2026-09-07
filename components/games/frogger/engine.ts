@@ -34,6 +34,11 @@ const JUMP_MS = 120; // duración de la animación de salto
 const ROUND_TIME_S = 15; // temporizador inicial de ronda
 const GOAL_COUNT = 5; // bocas destino en la fila superior
 
+// Ciclo de inmersión de las tortugas: visible → bajo el agua → visible…
+const RIVER_VISIBLE_MS = 3000;
+const RIVER_SUBMERGE_MS = 1500;
+const RIVER_CYCLE_MS = RIVER_VISIBLE_MS + RIVER_SUBMERGE_MS;
+
 // ── Tipos locales ────────────────────────────────────────────────────────
 type Direction = "up" | "down" | "left" | "right";
 
@@ -48,7 +53,10 @@ interface Entity {
   col: number; // columna fraccional (permite movimiento sub-celda)
   width: number; // en celdas
   type: "car" | "truck" | "log" | "turtle";
+  /** Solo tortugas: visible cuando false. */
   submerged?: boolean;
+  /** Solo tortugas: ms transcurridos en la fase actual del ciclo de inmersión. */
+  submergeT?: number;
 }
 
 interface Frog {
@@ -119,9 +127,105 @@ export function createGame(
     lastTime = null;
   }
 
-  // Placeholder — se implementa en el Paso 3 (construir el mapa de carriles).
-  function buildLanes(_level: number): Lane[] {
-    return [];
+  // ── Paso 3: mapa de carriles ─────────────────────────────────────────────
+  // Coloca entidades a lo largo de una tira virtual (puede exceder [0, COLS)):
+  // el Paso 4 las reintroduce por el lado opuesto al salir de pantalla, así
+  // que la posición inicial exacta solo importa para dejar huecos visibles.
+  function layoutEntities(
+    widths: number[],
+    gapRange: [number, number],
+  ): { col: number; width: number }[] {
+    const out: { col: number; width: number }[] = [];
+    let col = Math.random() * COLS;
+    for (const width of widths) {
+      out.push({ col, width });
+      const gap = gapRange[0] + Math.random() * (gapRange[1] - gapRange[0]);
+      col += width + gap;
+    }
+    return out;
+  }
+
+  function buildRoadLane(row: number, dir: 1 | -1, speed: number): Lane {
+    // 3–4 vehículos por carril; huecos de 2–4 celdas: siempre atravesable.
+    const count = 3 + Math.floor(Math.random() * 2);
+    const widths = Array.from({ length: count }, () =>
+      Math.random() < 0.35 ? 2 + Math.floor(Math.random() * 2) : 1,
+    );
+    const placed = layoutEntities(widths, [2, 4]);
+    const entities: Entity[] = placed.map((p, i) => ({
+      col: p.col,
+      width: p.width,
+      type: widths[i] > 1 ? "truck" : "car",
+    }));
+    return { row, speed, dir, entities };
+  }
+
+  function buildLogLane(row: number, dir: 1 | -1, speed: number): Lane {
+    // Troncos de 2–4 celdas, huecos de al menos 1 celda.
+    const count = 3 + Math.floor(Math.random() * 2);
+    const widths = Array.from(
+      { length: count },
+      () => 2 + Math.floor(Math.random() * 3),
+    );
+    const placed = layoutEntities(widths, [1, 3]);
+    const entities: Entity[] = placed.map((p) => ({
+      col: p.col,
+      width: p.width,
+      type: "log",
+    }));
+    return { row, speed, dir, entities };
+  }
+
+  function buildTurtleLane(row: number, dir: 1 | -1, speed: number): Lane {
+    // Grupos de 2–3 tortugas, huecos de al menos 1 celda; cada grupo arranca
+    // en un punto distinto de su ciclo de inmersión para que no se sincronicen.
+    const count = 3 + Math.floor(Math.random() * 2);
+    const widths = Array.from(
+      { length: count },
+      () => 2 + Math.floor(Math.random() * 2),
+    );
+    const placed = layoutEntities(widths, [1, 3]);
+    const entities: Entity[] = placed.map((p) => ({
+      col: p.col,
+      width: p.width,
+      type: "turtle",
+      submerged: false,
+      submergeT: Math.random() * RIVER_CYCLE_MS,
+    }));
+    return { row, speed, dir, entities };
+  }
+
+  function buildLanes(level: number): Lane[] {
+    const speedScale = Math.pow(1.15, level - 1);
+    const result: Lane[] = [];
+
+    // Carretera: filas ROW_ROAD_TOP..ROW_ROAD_BOT (5 carriles), sentidos
+    // alternos, velocidad 1.5–4 px/frame escalada por nivel.
+    const roadRows: number[] = [];
+    for (let r = ROW_ROAD_TOP; r <= ROW_ROAD_BOT; r++) roadRows.push(r);
+    roadRows.forEach((row, i) => {
+      const dir: 1 | -1 = i % 2 === 0 ? 1 : -1;
+      const t = roadRows.length > 1 ? i / (roadRows.length - 1) : 0;
+      const baseSpeed = 1.5 + t * (4 - 1.5);
+      result.push(buildRoadLane(row, dir, baseSpeed * speedScale));
+    });
+
+    // Río: filas ROW_RIVER_TOP..ROW_RIVER_BOT (6 carriles), alternando
+    // troncos y tortugas, velocidad 1–3 px/frame escalada por nivel.
+    const riverRows: number[] = [];
+    for (let r = ROW_RIVER_TOP; r <= ROW_RIVER_BOT; r++) riverRows.push(r);
+    riverRows.forEach((row, i) => {
+      const dir: 1 | -1 = i % 2 === 0 ? -1 : 1;
+      const t = riverRows.length > 1 ? i / (riverRows.length - 1) : 0;
+      const baseSpeed = (1 + t * (3 - 1)) * speedScale;
+      result.push(
+        i % 2 === 1
+          ? buildTurtleLane(row, dir, baseSpeed)
+          : buildLogLane(row, dir, baseSpeed),
+      );
+    });
+
+    return result;
   }
 
   // ── Input ──────────────────────────────────────────────────────────────

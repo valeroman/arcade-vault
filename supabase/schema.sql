@@ -153,6 +153,22 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
  'ARCADE', 'cover-snake', 'green', 1, '/games/snake');
 
 -- ============================================================
+-- Datos (spec game-jam/frogger/01-frogger-core): fila de Frogger
+-- id = 'rana' (no 'frogger'): route ya usa el slug '/games/frogger' para la
+-- ruta estática jugable, y una ruta estática siempre gana sobre la
+-- dinámica `[id]` para la misma URL — si id también fuera 'frogger', la
+-- página de detalle/leaderboard vía /games/[id] sería inalcanzable. Mismo
+-- patrón que rocas/asteroids, tetro/tetris, ladrillos/arkanoid y vibora/snake.
+-- Reusa el bloque .cover-rana huérfano de globals.css (catálogo mock
+-- eliminado, ya temático de rana/agua) en vez de crear un cover-frogger nuevo.
+-- color = 'green' (no 'lime', que no existe en el check constraint).
+-- ============================================================
+insert into games (id, title, short, long, cat, cover, color, difficulty, route) values
+('rana', 'FROGGER', 'Cruza la carretera y el río sin convertirte en papilla.',
+ 'Guía a tu rana a través de una carretera repleta de coches y un río de troncos y tortugas flotantes. Llena las cinco bocas del otro lado para completar la ronda; cada nivel acelera el tráfico y acorta el tiempo. Tres vidas y mucho asfalto por delante.',
+ 'ARCADE', 'cover-rana', 'green', 3, '/games/frogger');
+
+-- ============================================================
 -- Migración para una base de datos que ya ejecutó el schema
 -- anterior (con columnas games.best / games.plays y 8 juegos).
 -- Ejecutar este bloque en vez del anterior si `games` ya existe.

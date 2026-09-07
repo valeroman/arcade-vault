@@ -1,6 +1,6 @@
 # SPEC — Frogger: integración core del juego
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** 06-games-table-leaderboard-supabase
 > **Fecha:** 2026-05-20
 > **Objetivo:** Integrar Frogger (canvas puro, construido desde cero) como juego jugable en Arcade Vault con `games.id = 'rana'` (ruta `/games/frogger`), conectando score, vidas, nivel y game over vía el motor `engine.ts` y el wrapper estándar de la plataforma.
@@ -185,38 +185,38 @@ No se introducen nuevas tablas ni tipos TypeScript de Supabase — se reutilizan
 
 ## Acceptance criteria
 
-- [ ] La fila `rana` existe en la tabla `games` de Supabase con los valores del data model (`route = '/games/frogger'`).
-- [ ] La card de Frogger aparece en `/games` con cover `cover-rana` y color `green`.
-- [ ] La ruta `/games/frogger` carga sin errores de SSR ni de TypeScript.
-- [ ] El canvas (640 × 560) se renderiza con las tres zonas visualmente diferenciadas (carretera, río, zonas seguras, bocas destino).
-- [ ] La rana aparece centrada en la fila de inicio al cargar la partida.
-- [ ] La rana salta exactamente una celda (40 px) por pulsación de tecla de dirección con animación de 120 ms.
-- [ ] La rana no puede salir por los bordes laterales.
-- [ ] Los coches y camiones se mueven horizontalmente en loop por sus carriles; se reintroducen por el lado opuesto al salir.
-- [ ] Los troncos y tortugas se mueven horizontalmente en loop por sus carriles.
-- [ ] Las tortugas alternan entre visible y sumergida con el ciclo definido.
-- [ ] La rana muere al ser alcanzada por un vehículo de carretera.
-- [ ] La rana muere al caer al agua (no estar sobre tronco ni tortugas visibles).
-- [ ] La rana muere cuando la tortuga que la soporta se sumerge.
-- [ ] La rana muere al agotar el temporizador de ronda.
-- [ ] Al morir, se resta 1 vida y la rana vuelve a la fila de inicio; el icono de vidas del HUD interno se actualiza.
-- [ ] Al llegar a una boca libre, la boca queda marcada y se suma el bonus de puntuación.
-- [ ] Al llegar a una boca ya ocupada, la rana muere.
-- [ ] Al completar las 5 bocas, la ronda termina y comienza la siguiente con `level` incrementado.
-- [ ] El HUD interno (nivel) refleja el incremento al iniciar cada nueva ronda.
-- [ ] La velocidad de entidades aumenta con cada nivel.
-- [ ] El temporizador de ronda disminuye con cada nivel.
-- [ ] El HUD interno del canvas (score, nivel, vidas-iconos, barra de tiempo) se dibuja correctamente y en tiempo real.
-- [ ] La tecla `KeyP` alterna pausa (overlay "PAUSA") congelando `update()` sin detener `draw()`.
-- [ ] Escribir en el input del modal de nombre no mueve la rana ni pausa/despausa el juego.
-- [ ] Al llegar a `lives = 0`, `cb.onGameOver(score)` se dispara; aparece el modal React con overlay "GAME OVER" de fondo.
-- [ ] El modal pre-rellena el nombre desde `av_player_name` si existe en localStorage.
-- [ ] Al confirmar el nombre, el score se inserta en Supabase vía `submitScore("rana", name, score)` y el nombre se persiste en localStorage.
-- [ ] El botón de guardar se deshabilita tras el primer envío (sin doble inserción).
-- [ ] El botón "JUGAR DE NUEVO" reinicia la partida desde cero (`handle.restart()`).
-- [ ] El score guardado aparece en `/games/rana` (detalle) y en `/hall-of-fame` al recargar.
-- [ ] `npm run build` completa sin errores de TypeScript.
-- [ ] Ninguna ruta existente devuelve 500.
+- [x] La fila `rana` existe en la tabla `games` de Supabase con los valores del data model (`route = '/games/frogger'`).
+- [x] La card de Frogger aparece en `/games` con cover `cover-rana` y color `green`.
+- [x] La ruta `/games/frogger` carga sin errores de SSR ni de TypeScript.
+- [x] El canvas (640 × 560) se renderiza con las tres zonas visualmente diferenciadas (carretera, río, zonas seguras, bocas destino).
+- [x] La rana aparece centrada en la fila de inicio al cargar la partida.
+- [x] La rana salta exactamente una celda (40 px) por pulsación de tecla de dirección con animación de 120 ms.
+- [x] La rana no puede salir por los bordes laterales.
+- [x] Los coches y camiones se mueven horizontalmente en loop por sus carriles; se reintroducen por el lado opuesto al salir.
+- [x] Los troncos y tortugas se mueven horizontalmente en loop por sus carriles.
+- [x] Las tortugas alternan entre visible y sumergida con el ciclo definido.
+- [x] La rana muere al ser alcanzada por un vehículo de carretera.
+- [x] La rana muere al caer al agua (no estar sobre tronco ni tortugas visibles).
+- [x] La rana muere cuando la tortuga que la soporta se sumerge.
+- [x] La rana muere al agotar el temporizador de ronda.
+- [x] Al morir, se resta 1 vida y la rana vuelve a la fila de inicio; el icono de vidas del HUD interno se actualiza.
+- [x] Al llegar a una boca libre, la boca queda marcada y se suma el bonus de puntuación.
+- [x] Al llegar a una boca ya ocupada, la rana muere.
+- [x] Al completar las 5 bocas, la ronda termina y comienza la siguiente con `level` incrementado.
+- [x] El HUD interno (nivel) refleja el incremento al iniciar cada nueva ronda.
+- [x] La velocidad de entidades aumenta con cada nivel.
+- [x] El temporizador de ronda disminuye con cada nivel.
+- [x] El HUD interno del canvas (score, nivel, vidas-iconos, barra de tiempo) se dibuja correctamente y en tiempo real.
+- [x] La tecla `KeyP` alterna pausa (overlay "PAUSA") congelando `update()` sin detener `draw()`.
+- [x] Escribir en el input del modal de nombre no mueve la rana ni pausa/despausa el juego.
+- [x] Al llegar a `lives = 0`, `cb.onGameOver(score)` se dispara; aparece el modal React con overlay "GAME OVER" de fondo.
+- [x] El modal pre-rellena el nombre desde `av_player_name` si existe en localStorage.
+- [x] Al confirmar el nombre, el score se inserta en Supabase vía `submitScore("rana", name, score)` y el nombre se persiste en localStorage.
+- [x] El botón de guardar se deshabilita tras el primer envío (sin doble inserción).
+- [x] El botón "JUGAR DE NUEVO" reinicia la partida desde cero (`handle.restart()`).
+- [x] El score guardado aparece en `/games/rana` (detalle) y en `/hall-of-fame` al recargar.
+- [x] `npm run build` completa sin errores de TypeScript.
+- [x] Ninguna ruta existente devuelve 500.
 
 ---
 

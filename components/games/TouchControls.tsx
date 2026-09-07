@@ -78,6 +78,26 @@ export function useTouchSupport(): boolean {
   return supported;
 }
 
+// Path de triángulo por dirección, uno por rotación — mismo `viewBox`/`path`
+// que `references/resources/gamepad-assets/gamepad.html` (`.dp-arrow`).
+const DPAD_ARROW_PATHS: Record<string, string> = {
+  "dpad-up": "M12 4 L20 16 L4 16 Z",
+  "dpad-right": "M8 4 L20 12 L8 20 Z",
+  "dpad-down": "M4 8 L20 8 L12 20 Z",
+  "dpad-left": "M16 4 L16 20 L4 12 Z",
+};
+
+/** SVG de flecha para un slot de d-pad, o `null` si el slot no es de d-pad. */
+function dpadArrowPath(slot: TouchButton["slot"]) {
+  const path = DPAD_ARROW_PATHS[slot];
+  if (!path) return null;
+  return (
+    <svg className="touch-dpad-arrow" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={path} fill="currentColor" />
+    </svg>
+  );
+}
+
 /**
  * Un botón táctil individual, exportado para el caso de pausa: en el diseño
  * "bisel CRT" la pausa se muda de `.touch-actions` a la barra inferior
@@ -128,6 +148,8 @@ export function TouchButtonView({
     dispatchKey("keyup", button.code);
   };
 
+  const arrow = dpadArrowPath(button.slot);
+
   return (
     <button
       type="button"
@@ -137,7 +159,7 @@ export function TouchButtonView({
       onTouchEnd={handleEnd}
       onTouchCancel={handleEnd}
     >
-      {button.label}
+      {arrow ?? button.label}
     </button>
   );
 }
@@ -191,6 +213,9 @@ export default function TouchControls({ buttons }: TouchControlsProps) {
             {dpadButtons.map((button) => (
               <TouchButtonView key={button.slot} button={button} />
             ))}
+            <div className="gp-hub" aria-hidden="true">
+              <span className="gp-hub-gem" />
+            </div>
           </div>
         )}
         {actionButtons.length > 0 && (

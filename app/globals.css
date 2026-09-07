@@ -3008,17 +3008,58 @@ body.av-touch-game .game-bottom-bar {
 
 /* Botonera táctil compartida (`TouchControls.tsx`). Se apila debajo del
    canvas en el flujo normal del documento — nunca se superpone al HUD ni al
-   preview de Tetris. Centrada como un gamepad, no pegada a los bordes. */
+   preview de Tetris. Centrada como un gamepad, no pegada a los bordes.
+   Look "gamepad MK-II" (spec 11): mismo panel que `.gp`/`.gp::before`/
+   `.gp::after` de `references/resources/gamepad-assets/gamepad.html`, con los
+   tokens de color ya existentes en vez de variables nuevas. Mismo
+   padding/gap de siempre — el rediseño es solo de "chrome" visual. */
 .touch-controls {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 40px;
   margin-top: 20px;
   padding: 8px 12px;
+  background: linear-gradient(180deg, #1c1c28 0%, #0c0c14 100%);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow:
+    0 30px 80px -30px rgba(0, 245, 255, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+.touch-controls::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(0, 245, 255, 0.14);
+  border-radius: 18px;
+  pointer-events: none;
+}
+.touch-controls::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.6;
+}
+/* El d-pad y los botones de acción pintan encima de la textura/borde
+   decorativos (::before/::after), igual que `.gp-body` con z-index:1 en la
+   referencia. */
+.touch-controls > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Cruz de 4 direcciones: Snake (las 4), Tetris (izq/der/abajo) y Asteroids
@@ -3052,6 +3093,63 @@ body.av-touch-game .game-bottom-bar {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+/* Hub central del d-pad (spec 11): puramente decorativo (sin `data-key` ni
+   listeners), mismo patrón que `.dp-hub`/`.dp-hub-gem`/`pulse-led` de la
+   referencia. Centrado con posición absoluta (relativa a `.touch-dpad`/
+   `.touch-dpad-row`, ya con `position: relative` vía `.touch-controls > *`)
+   en vez de `grid-area`/`order` — así se ve igual sin importar el orden real
+   de los botones en el DOM, en la cruz completa, la cruz incompleta y la
+   fila simple por igual. Tamaño proporcional al `.touch-btn` ya existente
+   (no el 50px/46px fijo de la referencia, pensado para su propio d-pad de
+   156px), para no desalinear el layout ya afinado en la spec 10. */
+.gp-hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  background: radial-gradient(circle at 50% 50%, #181822 0%, #08080d 80%);
+  border: 1px solid rgba(0, 245, 255, 0.15);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+.gp-hub-gem {
+  width: 10px;
+  height: 10px;
+  background: var(--cyan);
+  box-shadow:
+    0 0 10px var(--cyan),
+    inset 0 0 4px rgba(0, 0, 0, 0.5);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation: gp-pulse 2s ease-in-out infinite;
+}
+@keyframes gp-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+/* En la fila simple (Arkanoid) el hueco entre los dos botones es el `gap:
+   16px` de `.touch-dpad-row`, mucho más angosto que la cruz completa — el
+   hub se achica para caber entre ambos sin taparlos. Misma especificidad en
+   ambos breakpoints (no depende del `@media` de abajo). */
+.touch-dpad-row .gp-hub {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+.touch-dpad-row .gp-hub-gem {
+  width: 6px;
+  height: 6px;
 }
 
 .touch-actions {
@@ -3090,6 +3188,21 @@ body.av-touch-game .game-bottom-bar {
   transform: scale(0.94);
 }
 
+/* Flechas del d-pad en SVG (spec 11): reemplazan el texto/emoji con glow
+   `filter: drop-shadow`, igual patrón que `.dp-arrow`/`.dp.on .dp-arrow` de
+   la referencia. `fill="currentColor"` en el `<path>` (ver
+   `TouchControls.tsx`) hereda el mismo `color` que ya distingue cian/magenta
+   por slot, sin agregar variables nuevas. */
+.touch-dpad-arrow {
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 0 3px currentColor);
+  transition: filter 140ms;
+}
+.touch-btn:active .touch-dpad-arrow {
+  filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor);
+}
+
 /* El d-pad usa botones cuadrados (look de gamepad físico); los de acción
    siguen circulares, como ya estaban. */
 .touch-dpad .touch-btn,
@@ -3099,16 +3212,49 @@ body.av-touch-game .game-bottom-bar {
 
 /* Los botones de acción (disparo, rotar, hard-drop) son más grandes que los
    de movimiento — la pausa ya no vive acá, se mudó a `.pause-pill` en la
-   barra inferior (ver diseño "bisel CRT"). */
+   barra inferior (ver diseño "bisel CRT"). Chrome esférico (spec 11): mismo
+   patrón que `.ab`/`.ab-ring` de la referencia — `radial-gradient` con
+   highlight superior + color medio/profundo por acción, y un anillo
+   punteado que aparece en `:active` vía `::after` (sin span extra, sin
+   tocar `TouchButtonView`). Mismo ícono (`⟳`/`⤓`/`🔥`) y mismo tamaño de
+   siempre — solo cambia el fondo alrededor. */
 .touch-actions .touch-btn {
+  --ab-mid: rgba(0, 200, 230, 0.7);
+  --ab-deep: rgba(0, 50, 70, 0.95);
+  position: relative;
   width: 68px;
   height: 68px;
   font-size: 22px;
+  background:
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.25),
+      transparent 50%
+    ),
+    radial-gradient(circle at 50% 55%, var(--ab-mid), var(--ab-deep) 75%);
+}
+.touch-actions .touch-btn::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dashed currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms,
+    transform 200ms;
+}
+.touch-actions .touch-btn:active::after {
+  opacity: 1;
+  transform: scale(1.08);
 }
 /* Cuando hay dos acciones (p. ej. rotar + hard-drop en Tetris), la segunda
    en magenta — distingue una de otra de un vistazo, como los "A"/"B" de un
    gamepad clásico. Asteroids, con una sola, se queda en cian por defecto. */
 .touch-btn-action-2 {
+  --ab-mid: rgba(255, 0, 110, 0.7);
+  --ab-deep: rgba(110, 0, 40, 0.95);
   border-color: var(--magenta);
   color: var(--magenta);
   box-shadow:
@@ -3116,7 +3262,14 @@ body.av-touch-game .game-bottom-bar {
     inset 0 0 8px rgba(255, 0, 110, 0.08);
 }
 .touch-btn-action-2:active {
-  background: rgba(255, 0, 110, 0.2);
+  background:
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.25),
+      transparent 50%
+    ),
+    radial-gradient(circle at 50% 55%, var(--ab-mid), var(--ab-deep) 75%),
+    rgba(255, 0, 110, 0.2);
   box-shadow:
     0 0 18px rgba(255, 0, 110, 0.55),
     inset 0 0 10px rgba(255, 0, 110, 0.35);
@@ -3139,6 +3292,18 @@ body.av-touch-game .game-bottom-bar {
     width: 48px;
     height: 48px;
     font-size: 15px;
+  }
+  .touch-dpad-arrow {
+    width: 20px;
+    height: 20px;
+  }
+  .gp-hub {
+    width: 24px;
+    height: 24px;
+  }
+  .gp-hub-gem {
+    width: 8px;
+    height: 8px;
   }
   .touch-actions .touch-btn {
     width: 56px;

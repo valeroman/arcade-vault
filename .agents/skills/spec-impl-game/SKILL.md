@@ -1,6 +1,6 @@
 ---
 name: spec-impl-game
-description: Implementa una spec aprobada de juego siguiendo /spec-impl y, al terminar, encadena skin-designer y después mobile-porter sobre ese juego. Secuencial, nunca en paralelo.
+description: Implementa una spec aprobada de juego siguiendo /spec-impl y, al terminar, encadena skin-designer, después mobile-porter y por último game-performance sobre ese juego. Secuencial, nunca en paralelo.
 disable-model-invocation: true
 argument-hint: "<NN-nombre-spec>"
 allowed-tools: Bash(git status:*), Bash(git branch:*), Bash(git checkout:*), Bash(cat:*), Bash(ls:*)
@@ -28,7 +28,7 @@ Catálogo de juegos ya implementados:
 
 Esta skill **no reimplementa `/spec-impl`**: ese skill está vendorizado y hasheado en `skills-lock.json` (fuente `Klerith/fernando-skills`) y trae `disable-model-invocation: true`, así que no se puede invocar con la tool Skill ni se debe editar a mano. En su lugar, esta skill **delega por lectura**: lee `.claude/skills/spec-impl/SKILL.md` (lectura obligatoria antes de la Fase A) y ejecuta sus cuatro fases tal como están escritas, usando el mismo `$ARGUMENTS`.
 
-Lo que esta skill añade es lo que viene **después**: verificar los criterios de aceptación y encadenar `skin-designer` y luego `mobile-porter` sobre el juego de esa spec — en ese orden, **uno después del otro, jamás en paralelo** (`mobile-porter` necesita que el selector de skin ya exista para montar la `.game-bottom-bar`).
+Lo que esta skill añade es lo que viene **después**: verificar los criterios de aceptación y encadenar `skin-designer`, luego `mobile-porter` y por último `game-performance` sobre el juego de esa spec — en ese orden, **uno después del otro, jamás en paralelo** (`mobile-porter` necesita que el selector de skin ya exista para montar la `.game-bottom-bar`; `game-performance` va al final porque `mobile-porter` es quien añade el escalado táctil del canvas y el compositing de la barra inferior, el último paso que cambia el coste de render).
 
 Tus respuestas van en español.
 
@@ -54,7 +54,7 @@ Tus respuestas van en español.
    Spec implementada: specs/NN-slug.md
    Juego detectado:   TITULO  (games.id: <id>, ruta: /games/<slug>)
 
-   Siguiente en la cadena: skin-designer <slug>, y después mobile-porter <slug>.
+   Siguiente en la cadena: skin-designer <slug>, después mobile-porter <slug>, y por último game-performance <slug>.
    ¿Lanzo skin-designer?
    ```
 
@@ -70,15 +70,24 @@ Tus respuestas van en español.
 
 1. Solo cuando `skin-designer` haya **terminado con éxito**, pide confirmación y lanza `mobile-porter <slug>` con el mismo identificador.
 2. Espera a que termine. Resume qué tocó: `TouchControls` + `TouchButton[]` en el wrapper, bisel `.game-crt`, `.game-bottom-bar`, escalado del canvas, y la fila nueva en `references/resources/game-with-mobile.md`.
-3. Cierra con el resumen de los tres tramos:
+3. Si el agente se detiene preguntando algo, traslada la pregunta al usuario tal cual y espera su respuesta. No respondas en su nombre ni lo relances a ciegas.
+
+## Fase E — game-performance
+
+1. Solo cuando `mobile-porter` haya **terminado con éxito**, pide confirmación y lanza `game-performance <slug>` con el mismo identificador.
+2. Espera a que termine. Resume qué tocó: qué puertas de calidad quedaron en `✅`, cuáles en `❌` y por qué (en particular si alguna requería tocar mecánica — G2/G10 — y esa aprobación quedó pendiente), y la fila nueva en `references/resources/game-perf-audit.md`.
+3. Si el agente se detiene preguntando algo (incluida la confirmación explícita de G2/G10, distinta de la confirmación general), traslada la pregunta al usuario tal cual y espera su respuesta. No respondas en su nombre ni lo relances a ciegas.
+4. **Un `❌` en alguna puerta no bloquea el cierre de la cadena** — a diferencia de un criterio de aceptación fallido en la Fase B, que sí para todo. Se registra y el humano decide si vale la pena una invocación posterior de `game-performance` sobre ese mismo juego.
+5. Cierra con el resumen de los cuatro tramos:
 
    ```
    ✅ Cadena completa para <TITULO>.
 
-   Spec:          specs/NN-slug.md  → Implementado
-   Rama:          spec-NN-slug (activa)
-   skin-designer: clasico / neon / retro aplicadas
-   mobile-porter: táctil + bisel CRT + barra inferior
+   Spec:            specs/NN-slug.md  → Implementado
+   Rama:            spec-NN-slug (activa)
+   skin-designer:   clasico / neon / retro aplicadas
+   mobile-porter:   táctil + bisel CRT + barra inferior
+   game-performance: N/10 puertas en ✅ (detalle en game-perf-audit.md)
 
    Pendiente humano: revisar el diff completo y abrir el PR de la rama.
    ```
@@ -87,9 +96,10 @@ Tus respuestas van en español.
 
 ## Reglas duras
 
-- **Nunca en paralelo.** `mobile-porter` solo arranca cuando `skin-designer` terminó.
-- **Nunca más de un juego por invocación.** Es el límite duro de ambos agentes.
+- **Nunca en paralelo.** `mobile-porter` solo arranca cuando `skin-designer` terminó; `game-performance` solo arranca cuando `mobile-porter` terminó.
+- **Nunca más de un juego por invocación.** Es el límite duro de los tres agentes.
 - **Nunca detonar agentes** si la Fase 2 de `/spec-impl` bloqueó, si algún criterio de aceptación falló, o si la spec no es de un juego.
 - **Nunca editar `.claude/skills/spec-impl/SKILL.md` ni `skills-lock.json`** — están vendorizadas y hasheadas.
 - **Nunca commitear ni abrir PR.** Igual que `/spec-impl`, esta skill deja la rama lista y el humano decide.
 - Los agentes escriben código: **no dupliques su trabajo** ni retoques a mano lo que ya aplicaron.
+- Un `❌` de `game-performance` en alguna puerta de calidad **no** equivale a un criterio de aceptación fallido: no revierte la spec a un estado anterior ni bloquea el cierre de la cadena.

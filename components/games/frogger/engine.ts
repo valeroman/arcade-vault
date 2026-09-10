@@ -4,15 +4,53 @@
 // es on-canvas (dibujado en draw()), así que no requiere callback de HUD
 // como Tetris; la pausa también vive dentro del engine (tecla P), igual
 // que en snake/engine.ts.
+//
+// Todo el color sale de la skin activa (components/games/skins.ts): el engine
+// no tiene literales de color. La skin se puede cambiar en caliente
+// (`setSkin`) sin tocar el estado de la partida.
+
+import {
+  DEFAULT_SKIN,
+  getSkin,
+  type Skin,
+  type SkinId,
+} from "@/components/games/skins";
 
 export type EngineCallbacks = {
   onGameOver: (score: number) => void;
+  /** Skin inicial. Si falta, `clasico` (aspecto original del juego). */
+  skin?: SkinId;
 };
 
 export type EngineHandle = {
   restart: () => void;
   destroy: () => void;
+  /** Cambia la skin en caliente, sin reiniciar la partida en curso. */
+  setSkin: (id: SkinId) => void;
 };
+
+// Índices de `Skin.entities` para la skin `rana` (ver components/games/skins.ts).
+// Frogger no tiene una paleta rotatoria como Tetris: usa `entities` como una
+// lista ordenada y con significado fijo, igual que Arkanoid con sus bloques.
+const E_ROAD = 0;
+const E_RIVER = 1;
+const E_SAFE_MID = 2;
+const E_GOALS_BAND = 3;
+const E_GOAL_FILL = 4;
+/** Coches: 3 colores contiguos, rotados por `row % 3`. */
+const E_CAR = 5;
+const E_TRUCK_BODY = 8;
+const E_TRUCK_CAB = 9;
+const E_LOG_BODY = 10;
+const E_LOG_GRAIN = 11;
+const E_TURTLE_SHELL = 12;
+const E_TURTLE_EDGE = 13;
+const E_TURTLE_SUBMERGED = 14;
+const E_TIME_OK = 15;
+const E_TIME_WARN = 16;
+const E_TIME_LOW = 17;
+/** Detalle oscuro: ruedas de los coches y pupilas de la rana. */
+const E_DARK = 18;
 
 // ── Grid y zonas ───────────────────────────────────────────────────────────
 const COLS = 16;
@@ -87,6 +125,10 @@ export function createGame(
     throw new Error("No se pudo obtener el contexto 2D del canvas");
   }
   const ctx: CanvasRenderingContext2D = ctx2d;
+
+  // La skin es puro color: vive fuera del estado de partida, así que cambiarla
+  // en caliente no toca ni la puntuación ni la posición de nada.
+  let skin: Skin = getSkin(cb.skin ?? DEFAULT_SKIN, "rana");
 
   // Estado del juego — vive en el closure de esta llamada a createGame,
   // nunca en scope global ni en variables de módulo compartidas.
@@ -454,10 +496,10 @@ export function createGame(
   }
 
   function drawBackground() {
-    ctx.fillStyle = "#0a2a12"; // verde oscuro — zonas seguras (base del canvas)
+    ctx.fillStyle = skin.bg; // zonas seguras (base del canvas)
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    ctx.fillStyle = "#111"; // carretera
+    ctx.fillStyle = skin.entities[E_ROAD]; // carretera
     ctx.fillRect(
       0,
       ROW_ROAD_TOP * CELL,
@@ -465,7 +507,7 @@ export function createGame(
       (ROW_ROAD_BOT - ROW_ROAD_TOP + 1) * CELL,
     );
 
-    ctx.fillStyle = "#012b3d"; // río
+    ctx.fillStyle = skin.entities[E_RIVER]; // río
     ctx.fillRect(
       0,
       ROW_RIVER_TOP * CELL,
@@ -473,10 +515,10 @@ export function createGame(
       (ROW_RIVER_BOT - ROW_RIVER_TOP + 1) * CELL,
     );
 
-    ctx.fillStyle = "#123a1c"; // franja media segura (fila 7, entre río y carretera)
+    ctx.fillStyle = skin.entities[E_SAFE_MID]; // franja media segura (fila 7, entre río y carretera)
     ctx.fillRect(0, ROW_SAFE_MID * CELL, CANVAS_W, CELL);
 
-    ctx.fillStyle = "#8be04f"; // bocas destino
+    ctx.fillStyle = skin.entities[E_GOALS_BAND]; // bocas destino
     ctx.fillRect(0, ROW_GOALS * CELL, CANVAS_W, CELL);
   }
 
@@ -486,22 +528,22 @@ export function createGame(
     const w = e.width * CELL;
 
     if (e.type === "car") {
-      ctx.fillStyle = ["#e33333", "#e3c233", "#3399e3"][lane.row % 3];
+      ctx.fillStyle = skin.entities[E_CAR + (lane.row % 3)];
       ctx.fillRect(x + 2, y + 8, w - 4, CELL - 16);
-      ctx.fillStyle = "#111";
+      ctx.fillStyle = skin.entities[E_DARK];
       ctx.beginPath();
       ctx.arc(x + 8, y + CELL - 8, 5, 0, Math.PI * 2);
       ctx.arc(x + w - 8, y + CELL - 8, 5, 0, Math.PI * 2);
       ctx.fill();
     } else if (e.type === "truck") {
-      ctx.fillStyle = "#888";
+      ctx.fillStyle = skin.entities[E_TRUCK_BODY];
       ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
-      ctx.fillStyle = "#555";
+      ctx.fillStyle = skin.entities[E_TRUCK_CAB];
       ctx.fillRect(x + 2, y + 6, Math.min(CELL - 8, w - 4), CELL - 12);
     } else if (e.type === "log") {
-      ctx.fillStyle = "#7a4a26";
+      ctx.fillStyle = skin.entities[E_LOG_BODY];
       ctx.fillRect(x, y + 6, w, CELL - 12);
-      ctx.strokeStyle = "#5a3418";
+      ctx.strokeStyle = skin.entities[E_LOG_GRAIN];
       for (let lx = x + 6; lx < x + w; lx += 10) {
         ctx.beginPath();
         ctx.moveTo(lx, y + 6);
@@ -510,12 +552,12 @@ export function createGame(
       }
     } else if (e.type === "turtle") {
       if (e.submerged) {
-        ctx.strokeStyle = "rgba(0,150,80,0.35)";
+        ctx.strokeStyle = skin.entities[E_TURTLE_SUBMERGED];
         ctx.lineWidth = 2;
         ctx.strokeRect(x + 4, y + 8, w - 8, CELL - 16);
       } else {
-        ctx.fillStyle = "#2e8b3d";
-        ctx.strokeStyle = "#1c5c28";
+        ctx.fillStyle = skin.entities[E_TURTLE_SHELL];
+        ctx.strokeStyle = skin.entities[E_TURTLE_EDGE];
         for (let i = 0; i < e.width; i++) {
           ctx.beginPath();
           ctx.arc(
@@ -537,13 +579,13 @@ export function createGame(
       const x = startCol * CELL;
       const y = ROW_GOALS * CELL;
       const w = 2 * CELL;
-      ctx.fillStyle = "#063d1a";
+      ctx.fillStyle = skin.entities[E_GOAL_FILL];
       ctx.fillRect(x + 2, y + 2, w - 4, CELL - 4);
-      ctx.strokeStyle = "#d4af37";
+      ctx.strokeStyle = skin.grid;
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
       if (goalsOccupied[i]) {
-        ctx.fillStyle = "#39ff6a";
+        ctx.fillStyle = skin.accent;
         ctx.beginPath();
         ctx.ellipse(x + w / 2, y + CELL / 2, 12, 9, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -557,7 +599,7 @@ export function createGame(
     const y = pos.y * CELL + CELL / 2;
 
     if (pos.jumping) {
-      ctx.strokeStyle = "#1c8a3a";
+      ctx.strokeStyle = skin.accent2;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(x - 16, y + 6);
@@ -567,17 +609,17 @@ export function createGame(
       ctx.stroke();
     }
 
-    ctx.fillStyle = "#39ff6a";
+    ctx.fillStyle = skin.accent;
     ctx.beginPath();
     ctx.ellipse(x, y, 14, 12, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.beginPath();
     ctx.arc(x - 5, y - 6, 3, 0, Math.PI * 2);
     ctx.arc(x + 5, y - 6, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#111";
+    ctx.fillStyle = skin.entities[E_DARK];
     ctx.beginPath();
     ctx.arc(x - 5, y - 6, 1.5, 0, Math.PI * 2);
     ctx.arc(x + 5, y - 6, 1.5, 0, Math.PI * 2);
@@ -585,7 +627,7 @@ export function createGame(
   }
 
   function drawHud() {
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.font = "bold 16px monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
@@ -598,20 +640,24 @@ export function createGame(
     for (let i = 0; i < lives; i++) {
       ctx.beginPath();
       ctx.arc(CANVAS_W - 14 - i * 20, 12, 7, 0, Math.PI * 2);
-      ctx.fillStyle = "#39ff6a";
+      ctx.fillStyle = skin.accent;
       ctx.fill();
     }
 
     const ratio = Math.max(0, roundTime / roundTimeForLevel(level));
     ctx.fillStyle =
-      ratio > 0.5 ? "#39ff6a" : ratio > 0.25 ? "#ffcc33" : "#ff3355";
+      ratio > 0.5
+        ? skin.entities[E_TIME_OK]
+        : ratio > 0.25
+          ? skin.entities[E_TIME_WARN]
+          : skin.entities[E_TIME_LOW];
     ctx.fillRect(0, 0, ratio * CANVAS_W, 4);
   }
 
   function drawOverlay(message: string) {
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = skin.overlay;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = skin.fg;
     ctx.font = "bold 32px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -646,6 +692,9 @@ export function createGame(
   return {
     restart: () => {
       initGame();
+    },
+    setSkin: (id: SkinId) => {
+      skin = getSkin(id, "rana");
     },
     destroy: () => {
       cancelAnimationFrame(rafId);

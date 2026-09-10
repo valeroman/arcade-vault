@@ -14,7 +14,7 @@
 export type SkinId = "clasico" | "neon" | "retro";
 
 /** `games.id` de los juegos del catálogo (nunca es el slug de la ruta). */
-export type SkinGameId = "rocas" | "tetro" | "ladrillos" | "vibora";
+export type SkinGameId = "rocas" | "tetro" | "ladrillos" | "vibora" | "rana";
 
 /**
  * Override por juego. Existe porque `clasico` es, por definición, "el aspecto
@@ -91,6 +91,40 @@ export const SKINS: Record<SkinId, Skin> = {
       // L, N) y `fg` al 12% = el brillo superior del bloque. El HUD (SCORE /
       // LINES / LEVEL) es DOM, lo pinta el design system, no la skin.
       // Estos 8 valores son los literales originales de `tetris/engine.ts`.
+      // FROGGER mapea así: `bg` = zonas seguras (base del canvas), `fg` = HUD,
+      // ojos de la rana y texto de los overlays, `grid` = borde de las bocas
+      // destino, `accent` = rana / vidas / rana ya colocada en su boca,
+      // `accent2` = patas durante el salto, `entities[i]` = superficies y
+      // actores en el orden de `FROGGER_TINT` (`frogger/engine.ts`).
+      // Estos valores son los literales originales del engine.
+      rana: {
+        bg: "#0a2a12",
+        grid: "#d4af37",
+        accent: "#39ff6a",
+        accent2: "#1c8a3a",
+        entities: [
+          "#111111", // 0  asfalto de la carretera
+          "#012b3d", // 1  agua del río
+          "#123a1c", // 2  franja segura intermedia
+          "#8be04f", // 3  banda de las bocas destino
+          "#063d1a", // 4  interior de cada boca
+          "#e33333", // 5  coche A (se rota por `row % 3`)
+          "#e3c233", // 6  coche B
+          "#3399e3", // 7  coche C
+          "#888888", // 8  caja del camión
+          "#555555", // 9  cabina del camión
+          "#7a4a26", // 10 tronco
+          "#5a3418", // 11 vetas del tronco
+          "#2e8b3d", // 12 caparazón de la tortuga
+          "#1c5c28", // 13 contorno del caparazón
+          "rgba(0,150,80,0.35)", // 14 tortuga sumergida (solo contorno)
+          "#39ff6a", // 15 barra de tiempo > 50%
+          "#ffcc33", // 16 barra de tiempo > 25%
+          "#ff3355", // 17 barra de tiempo crítica
+          "#111111", // 18 detalle oscuro: ruedas y pupilas
+        ],
+        overlay: "rgba(0, 0, 0, 0.55)",
+      },
       tetro: {
         grid: "#22222e",
         entities: [
@@ -137,6 +171,39 @@ export const SKINS: Record<SkinId, Skin> = {
           "#c77dff", // magenta
           "#ff8a00", // hotpink
           "#00ff88", // green
+        ],
+        overlay: "rgba(0, 0, 0, 0.6)",
+      },
+      // Las tres superficies (carretera, río, franja segura) quedan casi negras
+      // para que los actores saturados manden; se separan por tono, no por
+      // luminancia. La rana es amarilla: es el único amarillo del tablero, así
+      // que nunca se confunde con tortugas (verde), coches (rojo/rosa/azul) ni
+      // troncos (violeta). El caparazón se oscurece a propósito — la rana viaja
+      // encima y necesita 3:1 contra él.
+      rana: {
+        grid: "#ff006e",
+        accent: "#f5ff00",
+        accent2: "#9aa800",
+        entities: [
+          "#1c1c26", // 0  asfalto
+          "#05082e", // 1  río
+          "#001a12", // 2  franja segura intermedia
+          "#1b0033", // 3  banda de las bocas
+          "#000000", // 4  interior de la boca
+          "#ff2d55", // 5  coche A
+          "#ff5cff", // 6  coche B
+          "#6aa8ff", // 7  coche C
+          "#c7d0e0", // 8  caja del camión
+          "#5c6473", // 9  cabina
+          "#8a4dff", // 10 tronco
+          "#b98cff", // 11 vetas (aquí más claras que el tronco, no más oscuras)
+          "#009e57", // 12 caparazón
+          "#2fd98f", // 13 contorno del caparazón
+          "rgba(0,255,136,0.5)", // 14 tortuga sumergida
+          "#00ff88", // 15 tiempo ok
+          "#f5ff00", // 16 tiempo medio
+          "#ff2d55", // 17 tiempo crítico
+          "#000000", // 18 ruedas y pupilas
         ],
         overlay: "rgba(0, 0, 0, 0.6)",
       },
@@ -190,6 +257,36 @@ export const SKINS: Record<SkinId, Skin> = {
           "#12d97a", // magenta
           "#ffb000", // hotpink
           "#2fd977", // green (más apagado que `fg`: la pelota nunca se camufla)
+        ],
+        overlay: "rgba(2, 10, 4, 0.6)",
+      },
+      // Reparto de fósforos: verde para lo vivo (rana, tortugas, tiempo) y
+      // ámbar para lo inerte (coches, camiones, troncos, bordes de las bocas).
+      // La rana es el verde más claro de la paleta y el caparazón el más
+      // apagado, para que se distingan mientras la rana cruza montada encima.
+      rana: {
+        accent: "#7dff9f",
+        accent2: "#2fd463",
+        entities: [
+          "#1c2418", // 0  asfalto
+          "#02120a", // 1  río
+          "#0b2a14", // 2  franja segura intermedia
+          "#123d1d", // 3  banda de las bocas
+          "#020a04", // 4  interior de la boca
+          "#ff8a00", // 5  coche A
+          "#ffcf3a", // 6  coche B
+          "#ff6a1f", // 7  coche C
+          "#b6c9a6", // 8  caja del camión
+          "#55704a", // 9  cabina
+          "#a06a00", // 10 tronco
+          "#d1a04a", // 11 vetas (más claras que el tronco)
+          "#17803c", // 12 caparazón
+          "#45e07f", // 13 contorno del caparazón
+          "rgba(51,255,102,0.5)", // 14 tortuga sumergida
+          "#33ff66", // 15 tiempo ok
+          "#ffcf3a", // 16 tiempo medio
+          "#ff6a1f", // 17 tiempo crítico
+          "#020a04", // 18 ruedas y pupilas
         ],
         overlay: "rgba(2, 10, 4, 0.6)",
       },

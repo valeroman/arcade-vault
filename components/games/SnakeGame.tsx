@@ -102,6 +102,8 @@ export default function SnakeGame() {
 
     return () => {
       handle.destroy();
+      // Ambas refs sueltan el closure del motor destruido.
+      restartRef.current = null;
       setSkinRef.current = null;
     };
   }, []);

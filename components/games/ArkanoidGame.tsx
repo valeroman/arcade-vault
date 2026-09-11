@@ -103,6 +103,10 @@ export default function ArkanoidGame() {
 
     return () => {
       handle.destroy();
+      // Anular las refs evita que un `restart`/`setSkin` disparado desde el
+      // modal ya desmontado reviva el rAF de un motor destruido.
+      restartRef.current = null;
+      setSkinRef.current = null;
     };
   }, []);
 

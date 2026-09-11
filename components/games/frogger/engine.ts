@@ -116,6 +116,233 @@ const DIR_CODES: Record<string, Direction> = {
   ArrowRight: "right",
 };
 
+// ── Prerender por skin ─────────────────────────────────────────────────────
+// Frogger no carga assets (todo es procedural), pero su dibujo sí tenía mucho
+// contenido invariante repetido en cada frame: las bandas del tablero, los
+// marcos de las bocas destino y, sobre todo, las vetas de los troncos (hasta
+// 16 `stroke()` por tronco y frame, ~126 por frame en total).
+//
+// Todo eso se pinta una sola vez sobre canvas offscreen cacheados a nivel de
+// **módulo** con clave `skin.id` — el mismo patrón que `arkanoid/sprites.ts`.
+// Se cachea a nivel de módulo porque es un asset derivado de la skin, no
+// estado de partida: el estado sigue viviendo en el closure de `createGame`.
+//
+// Nota sobre `LINE`: las vetas del tronco y el contorno del caparazón nunca
+// fijaban `lineWidth` y heredaban el del draw anterior (2 de los marcos de las
+// bocas en régimen estable, 3 durante un salto — de ahí el parpadeo). Se fija
+// explícitamente en 2, que es el grosor visible en régimen estable.
+const LINE = 2;
+const GOAL_MARK_W = 32;
+const GOAL_MARK_H = 24;
+const PIP = 16;
+
+type SpriteSet = {
+  /** Bandas del tablero + marcos de las bocas destino (estático completo). */
+  chrome: HTMLCanvasElement;
+  frog: HTMLCanvasElement;
+  goalMark: HTMLCanvasElement;
+  lifePip: HTMLCanvasElement;
+  /** Coches: un sprite por color rotado (`row % 3`). */
+  cars: HTMLCanvasElement[];
+  trucks: Map<number, HTMLCanvasElement>;
+  logs: Map<number, HTMLCanvasElement>;
+  turtles: Map<number, HTMLCanvasElement>;
+  turtlesSub: Map<number, HTMLCanvasElement>;
+};
+
+const spriteCache = new Map<SkinId, SpriteSet>();
+
+function layer(w: number, h: number): CanvasRenderingContext2D {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const lctx = c.getContext("2d");
+  if (!lctx) throw new Error("No se pudo prerenderizar los sprites de Frogger");
+  return lctx;
+}
+
+function buildChrome(skin: Skin): HTMLCanvasElement {
+  const c = layer(CANVAS_W, CANVAS_H);
+  c.fillStyle = skin.bg; // zonas seguras (base del canvas)
+  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  c.fillStyle = skin.entities[E_ROAD]; // carretera
+  c.fillRect(
+    0,
+    ROW_ROAD_TOP * CELL,
+    CANVAS_W,
+    (ROW_ROAD_BOT - ROW_ROAD_TOP + 1) * CELL,
+  );
+
+  c.fillStyle = skin.entities[E_RIVER]; // río
+  c.fillRect(
+    0,
+    ROW_RIVER_TOP * CELL,
+    CANVAS_W,
+    (ROW_RIVER_BOT - ROW_RIVER_TOP + 1) * CELL,
+  );
+
+  c.fillStyle = skin.entities[E_SAFE_MID]; // franja media segura (fila 7)
+  c.fillRect(0, ROW_SAFE_MID * CELL, CANVAS_W, CELL);
+
+  c.fillStyle = skin.entities[E_GOALS_BAND]; // banda de las bocas destino
+  c.fillRect(0, ROW_GOALS * CELL, CANVAS_W, CELL);
+
+  // Marcos vacíos de las bocas. Lo único dinámico de la fila (la rana ya
+  // colocada) se pinta encima en cada frame, en drawGoalMarks().
+  c.lineWidth = LINE;
+  const y = ROW_GOALS * CELL;
+  const w = 2 * CELL;
+  for (let i = 0; i < GOAL_COUNT; i++) {
+    const x = GOAL_COLS[i] * CELL;
+    c.fillStyle = skin.entities[E_GOAL_FILL];
+    c.fillRect(x + 2, y + 2, w - 4, CELL - 4);
+    c.strokeStyle = skin.grid;
+    c.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
+  }
+  return c.canvas;
+}
+
+function buildCar(skin: Skin, colorIndex: number): HTMLCanvasElement {
+  const c = layer(CELL, CELL); // los coches siempre miden 1 celda
+  c.fillStyle = skin.entities[E_CAR + colorIndex];
+  c.fillRect(2, 8, CELL - 4, CELL - 16);
+  c.fillStyle = skin.entities[E_DARK];
+  c.beginPath();
+  c.arc(8, CELL - 8, 5, 0, Math.PI * 2);
+  c.arc(CELL - 8, CELL - 8, 5, 0, Math.PI * 2);
+  c.fill();
+  return c.canvas;
+}
+
+function buildTruck(skin: Skin, width: number): HTMLCanvasElement {
+  const w = width * CELL;
+  const c = layer(w, CELL);
+  c.fillStyle = skin.entities[E_TRUCK_BODY];
+  c.fillRect(2, 6, w - 4, CELL - 12);
+  c.fillStyle = skin.entities[E_TRUCK_CAB];
+  c.fillRect(2, 6, Math.min(CELL - 8, w - 4), CELL - 12);
+  return c.canvas;
+}
+
+function buildLog(skin: Skin, width: number): HTMLCanvasElement {
+  const w = width * CELL;
+  const c = layer(w, CELL);
+  c.fillStyle = skin.entities[E_LOG_BODY];
+  c.fillRect(0, 6, w, CELL - 12);
+  c.strokeStyle = skin.entities[E_LOG_GRAIN];
+  c.lineWidth = LINE;
+  for (let lx = 6; lx < w; lx += 10) {
+    c.beginPath();
+    c.moveTo(lx, 6);
+    c.lineTo(lx, CELL - 6);
+    c.stroke();
+  }
+  return c.canvas;
+}
+
+function buildTurtle(skin: Skin, width: number): HTMLCanvasElement {
+  const c = layer(width * CELL, CELL);
+  c.fillStyle = skin.entities[E_TURTLE_SHELL];
+  c.strokeStyle = skin.entities[E_TURTLE_EDGE];
+  c.lineWidth = LINE;
+  for (let i = 0; i < width; i++) {
+    c.beginPath();
+    c.arc(i * CELL + CELL / 2, CELL / 2, CELL / 2 - 6, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+  }
+  return c.canvas;
+}
+
+function buildTurtleSub(skin: Skin, width: number): HTMLCanvasElement {
+  const w = width * CELL;
+  const c = layer(w, CELL);
+  c.strokeStyle = skin.entities[E_TURTLE_SUBMERGED];
+  c.lineWidth = LINE;
+  c.strokeRect(4, 8, w - 8, CELL - 16);
+  return c.canvas;
+}
+
+function buildFrog(skin: Skin): HTMLCanvasElement {
+  const c = layer(CELL, CELL);
+  const cx = CELL / 2;
+  const cy = CELL / 2;
+  c.fillStyle = skin.accent;
+  c.beginPath();
+  c.ellipse(cx, cy, 14, 12, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = skin.fg; // ojos
+  c.beginPath();
+  c.arc(cx - 5, cy - 6, 3, 0, Math.PI * 2);
+  c.arc(cx + 5, cy - 6, 3, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = skin.entities[E_DARK]; // pupilas
+  c.beginPath();
+  c.arc(cx - 5, cy - 6, 1.5, 0, Math.PI * 2);
+  c.arc(cx + 5, cy - 6, 1.5, 0, Math.PI * 2);
+  c.fill();
+  return c.canvas;
+}
+
+function buildGoalMark(skin: Skin): HTMLCanvasElement {
+  const c = layer(GOAL_MARK_W, GOAL_MARK_H);
+  c.fillStyle = skin.accent;
+  c.beginPath();
+  c.ellipse(GOAL_MARK_W / 2, GOAL_MARK_H / 2, 12, 9, 0, 0, Math.PI * 2);
+  c.fill();
+  return c.canvas;
+}
+
+function buildLifePip(skin: Skin): HTMLCanvasElement {
+  const c = layer(PIP, PIP);
+  c.fillStyle = skin.accent;
+  c.beginPath();
+  c.arc(PIP / 2, PIP / 2, 7, 0, Math.PI * 2);
+  c.fill();
+  return c.canvas;
+}
+
+function getSprites(skin: Skin): SpriteSet {
+  const cached = spriteCache.get(skin.id);
+  if (cached) return cached;
+  const set: SpriteSet = {
+    chrome: buildChrome(skin),
+    frog: buildFrog(skin),
+    goalMark: buildGoalMark(skin),
+    lifePip: buildLifePip(skin),
+    cars: [buildCar(skin, 0), buildCar(skin, 1), buildCar(skin, 2)],
+    trucks: new Map(),
+    logs: new Map(),
+    turtles: new Map(),
+    turtlesSub: new Map(),
+  };
+  spriteCache.set(skin.id, set);
+  return set;
+}
+
+/**
+ * Sprite por ancho, construido la primera vez que ese ancho aparece.
+ *
+ * `build` se recibe como función de módulo (no como arrow inline en el sitio de
+ * llamada) y la skin va por parámetro: una arrow literal en `drawEntity()` se
+ * asignaría de nuevo en cada entidad y en cada frame (~38 closures/frame), que
+ * es justo lo que la puerta G3 prohíbe.
+ */
+function byWidth(
+  cache: Map<number, HTMLCanvasElement>,
+  width: number,
+  skin: Skin,
+  build: (skin: Skin, w: number) => HTMLCanvasElement,
+): HTMLCanvasElement {
+  let img = cache.get(width);
+  if (!img) {
+    img = build(skin, width);
+    cache.set(width, img);
+  }
+  return img;
+}
+
 export function createGame(
   canvas: HTMLCanvasElement,
   cb: EngineCallbacks,
@@ -129,6 +356,11 @@ export function createGame(
   // La skin es puro color: vive fuera del estado de partida, así que cambiarla
   // en caliente no toca ni la puntuación ni la posición de nada.
   let skin: Skin = getSkin(cb.skin ?? DEFAULT_SKIN, "rana");
+  let sprites: SpriteSet = getSprites(skin);
+
+  // Todos los blits son 1:1 y a coordenadas enteras, así que el filtrado
+  // bilineal nunca aporta nada aquí: solo cuesta.
+  ctx.imageSmoothingEnabled = false;
 
   // Estado del juego — vive en el closure de esta llamada a createGame,
   // nunca en scope global ni en variables de módulo compartidas.
@@ -138,6 +370,12 @@ export function createGame(
   let roundTime = ROUND_TIME_S;
   let gameState: "playing" | "paused" | "gameover" = "playing";
   let lanes: Lane[] = [];
+  /**
+   * Índice fila → carril, reconstruido solo al generar los carriles. Evita los
+   * 3 `Array.find()` con closure que se ejecutaban en cada frame para resolver
+   * el carril de la rana (colisión, soporte y arrastre del tronco).
+   */
+  const lanesByRow: (Lane | null)[] = new Array(ROWS).fill(null);
   let goalsOccupied: boolean[] = new Array(GOAL_COUNT).fill(false);
   let frog: Frog = makeStartFrog();
   let pendingDir: Direction | null = null;
@@ -145,6 +383,18 @@ export function createGame(
 
   let rafId = 0;
   let lastTime: number | null = null;
+  let destroyed = false;
+
+  // Caché de los strings del HUD: se regeneran solo cuando su valor cambia,
+  // en vez de concatenar dos strings nuevos en cada frame.
+  let scoreText = "";
+  let scoreShown = Number.NaN;
+  let levelText = "";
+  let levelShown = Number.NaN;
+
+  // Objeto de scratch reutilizado por frogRenderPos(): antes devolvía un
+  // literal nuevo por frame.
+  const renderPos = { x: 0, y: 0, jumping: false };
 
   function makeStartFrog(): Frog {
     const startCol = Math.floor(COLS / 2);
@@ -169,7 +419,14 @@ export function createGame(
     pendingDir = null;
     maxRowReached = ROW_START;
     lanes = buildLanes(level);
+    indexLanes();
     lastTime = null;
+  }
+
+  /** Refresca `lanesByRow` tras (re)generar los carriles. */
+  function indexLanes() {
+    for (let r = 0; r < ROWS; r++) lanesByRow[r] = null;
+    for (let i = 0; i < lanes.length; i++) lanesByRow[lanes[i].row] = lanes[i];
   }
 
   // ── Paso 3: mapa de carriles ─────────────────────────────────────────────
@@ -277,15 +534,30 @@ export function createGame(
   // Normalizado a e.code. Restart queda expuesto solo vía EngineHandle.restart()
   // (botón del modal de React), no por teclado.
   function onKeyDown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement) return;
+    // Guard de foco: cubre los tres tipos editables/enfocables para que
+    // escribir el nombre en el modal (o usar cualquier control de formulario)
+    // no maneje la rana.
+    const t = e.target;
+    if (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLSelectElement ||
+      t instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
 
     const dir = DIR_CODES[e.code];
     if (dir) {
+      e.preventDefault(); // sin esto las flechas hacen scroll de la página
       pendingDir = dir;
       return;
     }
     if (e.code === "KeyP" && gameState !== "gameover") {
+      e.preventDefault();
       gameState = gameState === "paused" ? "playing" : "paused";
+      // Al pausar, el frame en curso pinta el overlay y el loop se detiene
+      // solo; al reanudar hay que volver a arrancarlo.
+      if (gameState === "playing") scheduleFrame();
     }
   }
   window.addEventListener("keydown", onKeyDown);
@@ -303,21 +575,32 @@ export function createGame(
   }
 
   // ── Paso 5: colisiones y soporte ─────────────────────────────────────────
-  function checkRoadCollision(f: Frog, allLanes: Lane[]): boolean {
-    const lane = allLanes.find((l) => l.row === f.row);
+  // Bucles `for` con índice en vez de find/some: estas dos funciones corren en
+  // cada frame mientras la rana no está saltando.
+  function checkRoadCollision(f: Frog): boolean {
+    const lane = lanesByRow[f.row];
     if (!lane) return false;
-    return lane.entities.some((e) => f.col >= e.col && f.col < e.col + e.width);
+    const list = lane.entities;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (f.col >= e.col && f.col < e.col + e.width) return true;
+    }
+    return false;
   }
 
-  function getSupport(f: Frog, allLanes: Lane[]): Entity | null {
-    const lane = allLanes.find((l) => l.row === f.row);
+  function getSupport(f: Frog): Entity | null {
+    const lane = lanesByRow[f.row];
     if (!lane) return null;
-    const found = lane.entities.find(
-      (e) => f.col >= e.col && f.col < e.col + e.width,
-    );
-    if (!found) return null;
-    if (found.type === "turtle" && found.submerged) return null;
-    return found;
+    const list = lane.entities;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      if (f.col >= e.col && f.col < e.col + e.width) {
+        // Primer match, igual que el find() original: una tortuga sumergida
+        // no sostiene aunque otra entidad también cubra la columna.
+        return e.type === "turtle" && e.submerged ? null : e;
+      }
+    }
+    return null;
   }
 
   function goalIndexForCol(col: number): number {
@@ -355,6 +638,7 @@ export function createGame(
     maxRowReached = ROW_START;
     level += 1;
     lanes = buildLanes(level);
+    indexLanes();
     roundTime = roundTimeForLevel(level);
     score += 200;
   }
@@ -370,13 +654,13 @@ export function createGame(
     }
 
     if (isRoadRow(frog.row)) {
-      if (checkRoadCollision(frog, lanes)) {
+      if (checkRoadCollision(frog)) {
         killFrog();
       }
       return;
     }
     if (isRiverRow(frog.row)) {
-      if (!getSupport(frog, lanes)) {
+      if (!getSupport(frog)) {
         killFrog();
       }
       return;
@@ -419,9 +703,15 @@ export function createGame(
   }
 
   function moveLanes(dt: number) {
-    for (const lane of lanes) {
-      for (const entity of lane.entities) {
-        entity.col += lane.speed * lane.dir * dt;
+    // Bucles con índice, no `for...of`: el iterador de un `for...of` es un
+    // objeto nuevo por array y por frame (1 + 11 carriles = 12 allocs/frame).
+    for (let i = 0; i < lanes.length; i++) {
+      const lane = lanes[i];
+      const list = lane.entities;
+      const step = lane.speed * lane.dir * dt;
+      for (let j = 0; j < list.length; j++) {
+        const entity = list[j];
+        entity.col += step;
         if (lane.dir > 0 && entity.col > COLS) {
           entity.col = -entity.width;
         } else if (lane.dir < 0 && entity.col + entity.width < 0) {
@@ -460,13 +750,13 @@ export function createGame(
       }
       // Colisión/soporte continuos entre saltos (un coche o el agua pueden
       // alcanzar a la rana aunque ella no se mueva).
-      if (isRoadRow(frog.row) && checkRoadCollision(frog, lanes)) {
+      if (isRoadRow(frog.row) && checkRoadCollision(frog)) {
         killFrog();
         return;
       }
       if (isRiverRow(frog.row)) {
-        const lane = lanes.find((l) => l.row === frog.row);
-        const support = getSupport(frog, lanes);
+        const lane = lanesByRow[frog.row];
+        const support = getSupport(frog);
         if (!support || !lane) {
           killFrog();
           return;
@@ -485,112 +775,51 @@ export function createGame(
     }
   }
 
-  function frogRenderPos(): { x: number; y: number; jumping: boolean } {
+  /** Escribe en el scratch `renderPos` y lo devuelve; nunca asigna memoria. */
+  function frogRenderPos() {
     if (!frog.animating) {
-      return { x: frog.col, y: frog.row, jumping: false };
+      renderPos.x = frog.col;
+      renderPos.y = frog.row;
+      renderPos.jumping = false;
+      return renderPos;
     }
     const t = Math.min(frog.animT / JUMP_MS, 1);
-    const x = frog.col + (frog.targetCol - frog.col) * t;
-    const y = frog.row + (frog.targetRow - frog.row) * t;
-    return { x, y, jumping: true };
+    renderPos.x = frog.col + (frog.targetCol - frog.col) * t;
+    renderPos.y = frog.row + (frog.targetRow - frog.row) * t;
+    renderPos.jumping = true;
+    return renderPos;
   }
 
-  function drawBackground() {
-    ctx.fillStyle = skin.bg; // zonas seguras (base del canvas)
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-    ctx.fillStyle = skin.entities[E_ROAD]; // carretera
-    ctx.fillRect(
-      0,
-      ROW_ROAD_TOP * CELL,
-      CANVAS_W,
-      (ROW_ROAD_BOT - ROW_ROAD_TOP + 1) * CELL,
-    );
-
-    ctx.fillStyle = skin.entities[E_RIVER]; // río
-    ctx.fillRect(
-      0,
-      ROW_RIVER_TOP * CELL,
-      CANVAS_W,
-      (ROW_RIVER_BOT - ROW_RIVER_TOP + 1) * CELL,
-    );
-
-    ctx.fillStyle = skin.entities[E_SAFE_MID]; // franja media segura (fila 7, entre río y carretera)
-    ctx.fillRect(0, ROW_SAFE_MID * CELL, CANVAS_W, CELL);
-
-    ctx.fillStyle = skin.entities[E_GOALS_BAND]; // bocas destino
-    ctx.fillRect(0, ROW_GOALS * CELL, CANVAS_W, CELL);
-  }
-
+  // Un solo blit por entidad, a coordenadas enteras (antes: hasta 19 ops y
+  // coordenadas fraccionales que forzaban antialiasing en cada tronco).
   function drawEntity(lane: Lane, e: Entity) {
-    const x = e.col * CELL;
+    const x = Math.round(e.col * CELL);
     const y = lane.row * CELL;
-    const w = e.width * CELL;
-
+    let img: HTMLCanvasElement;
     if (e.type === "car") {
-      ctx.fillStyle = skin.entities[E_CAR + (lane.row % 3)];
-      ctx.fillRect(x + 2, y + 8, w - 4, CELL - 16);
-      ctx.fillStyle = skin.entities[E_DARK];
-      ctx.beginPath();
-      ctx.arc(x + 8, y + CELL - 8, 5, 0, Math.PI * 2);
-      ctx.arc(x + w - 8, y + CELL - 8, 5, 0, Math.PI * 2);
-      ctx.fill();
+      img = sprites.cars[lane.row % 3];
     } else if (e.type === "truck") {
-      ctx.fillStyle = skin.entities[E_TRUCK_BODY];
-      ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
-      ctx.fillStyle = skin.entities[E_TRUCK_CAB];
-      ctx.fillRect(x + 2, y + 6, Math.min(CELL - 8, w - 4), CELL - 12);
+      img = byWidth(sprites.trucks, e.width, skin, buildTruck);
     } else if (e.type === "log") {
-      ctx.fillStyle = skin.entities[E_LOG_BODY];
-      ctx.fillRect(x, y + 6, w, CELL - 12);
-      ctx.strokeStyle = skin.entities[E_LOG_GRAIN];
-      for (let lx = x + 6; lx < x + w; lx += 10) {
-        ctx.beginPath();
-        ctx.moveTo(lx, y + 6);
-        ctx.lineTo(lx, y + CELL - 6);
-        ctx.stroke();
-      }
-    } else if (e.type === "turtle") {
-      if (e.submerged) {
-        ctx.strokeStyle = skin.entities[E_TURTLE_SUBMERGED];
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x + 4, y + 8, w - 8, CELL - 16);
-      } else {
-        ctx.fillStyle = skin.entities[E_TURTLE_SHELL];
-        ctx.strokeStyle = skin.entities[E_TURTLE_EDGE];
-        for (let i = 0; i < e.width; i++) {
-          ctx.beginPath();
-          ctx.arc(
-            x + i * CELL + CELL / 2,
-            y + CELL / 2,
-            CELL / 2 - 6,
-            0,
-            Math.PI * 2,
-          );
-          ctx.fill();
-          ctx.stroke();
-        }
-      }
+      img = byWidth(sprites.logs, e.width, skin, buildLog);
+    } else if (e.submerged) {
+      img = byWidth(sprites.turtlesSub, e.width, skin, buildTurtleSub);
+    } else {
+      img = byWidth(sprites.turtles, e.width, skin, buildTurtle);
     }
+    ctx.drawImage(img, x, y);
   }
 
-  function drawGoals() {
-    GOAL_COLS.forEach((startCol, i) => {
-      const x = startCol * CELL;
-      const y = ROW_GOALS * CELL;
-      const w = 2 * CELL;
-      ctx.fillStyle = skin.entities[E_GOAL_FILL];
-      ctx.fillRect(x + 2, y + 2, w - 4, CELL - 4);
-      ctx.strokeStyle = skin.grid;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
-      if (goalsOccupied[i]) {
-        ctx.fillStyle = skin.accent;
-        ctx.beginPath();
-        ctx.ellipse(x + w / 2, y + CELL / 2, 12, 9, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
+  /** Solo la parte dinámica de las bocas: los marcos ya vienen en `chrome`. */
+  function drawGoalMarks() {
+    for (let i = 0; i < GOAL_COUNT; i++) {
+      if (!goalsOccupied[i]) continue;
+      ctx.drawImage(
+        sprites.goalMark,
+        GOAL_COLS[i] * CELL + CELL - GOAL_MARK_W / 2,
+        ROW_GOALS * CELL + CELL / 2 - GOAL_MARK_H / 2,
+      );
+    }
   }
 
   function drawFrog() {
@@ -599,6 +828,10 @@ export function createGame(
     const y = pos.y * CELL + CELL / 2;
 
     if (pos.jumping) {
+      // Las patas son la única geometría que no se puede prerenderizar (su
+      // trazo depende del salto). save/restore para que `lineWidth` no se
+      // filtre al resto del frame.
+      ctx.save();
       ctx.strokeStyle = skin.accent2;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -607,41 +840,38 @@ export function createGame(
       ctx.moveTo(x + 16, y + 6);
       ctx.lineTo(x + 24, y + 16);
       ctx.stroke();
+      ctx.restore();
     }
 
-    ctx.fillStyle = skin.accent;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 14, 12, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = skin.fg;
-    ctx.beginPath();
-    ctx.arc(x - 5, y - 6, 3, 0, Math.PI * 2);
-    ctx.arc(x + 5, y - 6, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = skin.entities[E_DARK];
-    ctx.beginPath();
-    ctx.arc(x - 5, y - 6, 1.5, 0, Math.PI * 2);
-    ctx.arc(x + 5, y - 6, 1.5, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.drawImage(
+      sprites.frog,
+      Math.round(x - CELL / 2),
+      Math.round(y - CELL / 2),
+    );
   }
 
   function drawHud() {
+    if (scoreShown !== score) {
+      scoreShown = score;
+      scoreText = "SCORE " + score;
+    }
+    if (levelShown !== level) {
+      levelShown = level;
+      levelText = "NIVEL " + level;
+    }
+
+    ctx.save();
     ctx.fillStyle = skin.fg;
     ctx.font = "bold 16px monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillText("SCORE " + score, 8, 4);
-
+    ctx.fillText(scoreText, 8, 4);
     ctx.textAlign = "center";
-    ctx.fillText("NIVEL " + level, CANVAS_W / 2, 4);
+    ctx.fillText(levelText, CANVAS_W / 2, 4);
+    ctx.restore();
 
-    ctx.textAlign = "right";
     for (let i = 0; i < lives; i++) {
-      ctx.beginPath();
-      ctx.arc(CANVAS_W - 14 - i * 20, 12, 7, 0, Math.PI * 2);
-      ctx.fillStyle = skin.accent;
-      ctx.fill();
+      ctx.drawImage(sprites.lifePip, CANVAS_W - 22 - i * 20, 4);
     }
 
     const ratio = Math.max(0, roundTime / roundTimeForLevel(level));
@@ -651,10 +881,11 @@ export function createGame(
         : ratio > 0.25
           ? skin.entities[E_TIME_WARN]
           : skin.entities[E_TIME_LOW];
-    ctx.fillRect(0, 0, ratio * CANVAS_W, 4);
+    ctx.fillRect(0, 0, Math.round(ratio * CANVAS_W), 4);
   }
 
   function drawOverlay(message: string) {
+    ctx.save();
     ctx.fillStyle = skin.overlay;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.fillStyle = skin.fg;
@@ -662,42 +893,69 @@ export function createGame(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(message, CANVAS_W / 2, CANVAS_H / 2);
+    ctx.restore();
   }
 
   function draw() {
-    drawBackground();
-    for (const lane of lanes) {
-      for (const e of lane.entities) drawEntity(lane, e);
+    ctx.drawImage(sprites.chrome, 0, 0); // opaco y a canvas completo: no hace falta clear
+    for (let i = 0; i < lanes.length; i++) {
+      const lane = lanes[i];
+      const list = lane.entities;
+      for (let j = 0; j < list.length; j++) drawEntity(lane, list[j]);
     }
-    drawGoals();
+    drawGoalMarks();
     drawFrog();
     drawHud();
     if (gameState === "paused") drawOverlay("PAUSA");
-    if (gameState === "gameover") drawOverlay("GAME OVER");
+    else if (gameState === "gameover") drawOverlay("GAME OVER");
+  }
+
+  /**
+   * Reanuda el loop con guard cancel-then-request (patrón de
+   * `tetris/engine.ts:380-381`) para que nunca corran dos rAF en paralelo.
+   */
+  function scheduleFrame() {
+    if (destroyed) return;
+    if (rafId) cancelAnimationFrame(rafId);
+    lastTime = null; // el primer dt tras reanudar es 0
+    rafId = requestAnimationFrame(loop);
   }
 
   function loop(ts: number) {
+    rafId = 0;
     // Clamp de dt a 50ms — evita "spiral of death" en cambios de pestaña,
     // igual que Asteroids/Tetris/Arkanoid/Snake.
     const dt = lastTime === null ? 0 : Math.min((ts - lastTime) / 1000, 0.05);
     lastTime = ts;
     update(dt);
     draw();
-    rafId = requestAnimationFrame(loop);
+    // El frame en que se entra en pausa o game over sí se pinta (para que el
+    // overlay aparezca) y ahí se detiene el rAF: detrás del modal de React el
+    // juego no consume CPU.
+    if (gameState === "playing" && !destroyed) {
+      rafId = requestAnimationFrame(loop);
+    }
   }
 
   initGame();
-  rafId = requestAnimationFrame(loop);
+  scheduleFrame();
 
   return {
     restart: () => {
       initGame();
+      scheduleFrame();
     },
     setSkin: (id: SkinId) => {
       skin = getSkin(id, "rana");
+      sprites = getSprites(skin);
+      // Con el loop detenido (pausa / game over) hace falta un repintado
+      // puntual para que el cambio de skin se vea.
+      if (!rafId && !destroyed) draw();
     },
     destroy: () => {
+      destroyed = true;
       cancelAnimationFrame(rafId);
+      rafId = 0;
       window.removeEventListener("keydown", onKeyDown);
     },
   };

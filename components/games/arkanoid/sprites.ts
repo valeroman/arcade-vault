@@ -86,6 +86,18 @@ const SPRITES: Record<"paddle" | "ball", Frame> = {
   ball: { sx: 32, sy: 32, sw: 16, sh: 16 },
 };
 
+// ── Tamaños de render ────────────────────────────────────────────────────
+// Únicos tamaños a los que el juego dibuja cada sprite. Viven acá (y no en
+// engine.ts) porque son la clave del prerender: cada sprite se reescala una
+// sola vez a estas medidas y después se blitea 1:1, sin filtrado bilineal
+// por frame. El engine los importa para su geometría, así que no pueden
+// desincronizarse.
+export const BLOCK_RENDER_W = 64; // fuente 32 → 2,0×
+export const BLOCK_RENDER_H = 24; // fuente 16 → 1,5×
+export const PADDLE_RENDER_W = 81; // fuente 162 → 0,5×
+export const PADDLE_RENDER_H = 14; // fuente 14 → 1,0×
+export const BALL_RENDER = 16; // fuente 16 → 1,0×
+
 const BLOCK_SPRITES: Record<BlockColor, Frame> = {
   gray: { sx: 32, sy: 288, sw: 32, sh: 16 },
   red: { sx: 32, sy: 176, sw: 32, sh: 16 },
@@ -99,6 +111,11 @@ const BLOCK_SPRITES: Record<BlockColor, Frame> = {
 let ssImg: HTMLCanvasElement | null = null;
 let ssLoaded = false;
 let ssCallbacks: Array<() => void> = [];
+// Guard de carga en curso: se asigna *antes* del `.src =`, no en `onload`.
+// Con `ssImg` (que solo existe una vez decodificada la imagen) dos montajes
+// rápidos disparaban dos descargas concurrentes — mismo patrón ya correcto en
+// `snake/sprites.ts:66,74`.
+let loadingImg: HTMLImageElement | null = null;
 
 export function loadSpritesheet(cb: () => void) {
   if (ssLoaded) {
@@ -106,9 +123,10 @@ export function loadSpritesheet(cb: () => void) {
     return;
   }
   ssCallbacks.push(cb);
-  if (ssImg) return; // ya hay una carga en curso
+  if (loadingImg) return; // ya hay una carga en curso
 
   const rawImg = new Image();
+  loadingImg = rawImg;
   rawImg.onload = () => {
     const oc = document.createElement("canvas");
     oc.width = rawImg.width;
@@ -117,11 +135,18 @@ export function loadSpritesheet(cb: () => void) {
     octx?.drawImage(rawImg, 0, 0);
     ssImg = oc;
     ssLoaded = true;
+    loadingImg = null;
     const callbacks = ssCallbacks;
     ssCallbacks = [];
     callbacks.forEach((f) => f());
   };
-  rawImg.onerror = () => console.error("Failed to load spritesheet");
+  rawImg.onerror = () => {
+    // Libera el guard para que un montaje posterior pueda reintentar; los
+    // callbacks encolados siguen esperando ese reintento (nunca se los invoca
+    // sin hoja, para no arrancar un loop que dibujaría el vacío).
+    loadingImg = null;
+    console.error("Failed to load spritesheet");
+  };
   rawImg.src = "/games/arkanoid/spritesheet-breakout.png";
 }
 
@@ -260,34 +285,129 @@ function sheetFor(skin: Skin): HTMLCanvasElement | null {
   return built;
 }
 
-export function drawFrame(
-  ctx: CanvasRenderingContext2D,
-  frame: Frame,
-  x: number,
-  y: number,
+// ── Prerender por skin ───────────────────────────────────────────────────
+// Todos los sprites salvo la bola se dibujaban con escala no entera en cada
+// frame (bloques 32×16→64×24, pala 162×14→81×14): ~66 remuestreos bilineales
+// por frame para un resultado que nunca cambia. Acá cada sprite se reescala
+// una única vez a su tamaño de render y se cachea a nivel de módulo por
+// `skin.id` — el mismo criterio que la hoja re-tintada: asset derivado, no
+// estado de partida. Los píxeles resultantes son los mismos que producía el
+// escalado por frame; solo se paga una vez.
+
+type Prepared = {
+  blocks: Record<BlockColor, HTMLCanvasElement>;
+  explosions: Record<BlockColor, HTMLCanvasElement[]>;
+  paddle: HTMLCanvasElement;
+  ball: HTMLCanvasElement;
+};
+
+const preparedSheets = new Map<string, Prepared>();
+// Memo del último acceso: `draw()` pide la misma skin ~66 veces por frame y
+// así se resuelve con una comparación de string en vez de un `Map.get`.
+let lastPreparedId: string | null = null;
+let lastPrepared: Prepared | null = null;
+
+function scaleFrame(
+  sheet: HTMLCanvasElement,
+  f: Frame,
   w: number,
   h: number,
-  skin: Skin,
-) {
-  const sheet = sheetFor(skin);
-  if (!sheet) return;
-  ctx.drawImage(sheet, frame.sx, frame.sy, frame.sw, frame.sh, x, y, w, h);
+): HTMLCanvasElement {
+  const oc = document.createElement("canvas");
+  oc.width = w;
+  oc.height = h;
+  const octx = oc.getContext("2d");
+  octx?.drawImage(sheet, f.sx, f.sy, f.sw, f.sh, 0, 0, w, h);
+  return oc;
 }
 
-export function drawSprite(
+function buildPrepared(sheet: HTMLCanvasElement): Prepared {
+  const blocks = {} as Record<BlockColor, HTMLCanvasElement>;
+  const explosions = {} as Record<BlockColor, HTMLCanvasElement[]>;
+  for (const color of BLOCK_TINT_ORDER) {
+    blocks[color] = scaleFrame(
+      sheet,
+      BLOCK_SPRITES[color],
+      BLOCK_RENDER_W,
+      BLOCK_RENDER_H,
+    );
+    explosions[color] = EXPLOSION_FRAMES[color].map((f) =>
+      scaleFrame(sheet, f, BLOCK_RENDER_W, BLOCK_RENDER_H),
+    );
+  }
+  return {
+    blocks,
+    explosions,
+    paddle: scaleFrame(sheet, SPRITES.paddle, PADDLE_RENDER_W, PADDLE_RENDER_H),
+    ball: scaleFrame(sheet, SPRITES.ball, BALL_RENDER, BALL_RENDER),
+  };
+}
+
+function preparedFor(skin: Skin): Prepared | null {
+  if (lastPrepared !== null && lastPreparedId === skin.id) return lastPrepared;
+  const cached = preparedSheets.get(skin.id);
+  if (cached) {
+    lastPreparedId = skin.id;
+    lastPrepared = cached;
+    return cached;
+  }
+  const sheet = sheetFor(skin);
+  if (!sheet) return null; // hoja todavía sin cargar
+  const built = buildPrepared(sheet);
+  preparedSheets.set(skin.id, built);
+  lastPreparedId = skin.id;
+  lastPrepared = built;
+  return built;
+}
+
+// Las cuatro funciones de dibujo reciben el sprite por parámetro tipado en vez
+// de por nombre (`block_${color}`): ese template literal se construía una vez
+// por bloque y por frame, con su `startsWith`/`slice` detrás — hasta 120
+// strings por frame solo para elegir un rect.
+
+export function drawBlock(
   ctx: CanvasRenderingContext2D,
-  name: "paddle" | "ball" | `block_${BlockColor}`,
+  color: BlockColor,
   x: number,
   y: number,
-  w: number,
-  h: number,
   skin: Skin,
 ) {
-  const sheet = sheetFor(skin);
-  if (!sheet) return;
-  const sp: Frame | undefined = name.startsWith("block_")
-    ? BLOCK_SPRITES[name.slice(6) as BlockColor]
-    : SPRITES[name as "paddle" | "ball"];
-  if (!sp) return;
-  ctx.drawImage(sheet, sp.sx, sp.sy, sp.sw, sp.sh, x, y, w, h);
+  const p = preparedFor(skin);
+  if (!p) return;
+  ctx.drawImage(p.blocks[color], x, y);
+}
+
+export function drawExplosion(
+  ctx: CanvasRenderingContext2D,
+  color: BlockColor,
+  frameIndex: number,
+  x: number,
+  y: number,
+  skin: Skin,
+) {
+  const p = preparedFor(skin);
+  if (!p) return;
+  ctx.drawImage(p.explosions[color][frameIndex], x, y);
+}
+
+export function drawPaddle(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  skin: Skin,
+) {
+  const p = preparedFor(skin);
+  if (!p) return;
+  ctx.drawImage(p.paddle, x, y);
+}
+
+export function drawBall(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  skin: Skin,
+) {
+  const p = preparedFor(skin);
+  if (!p) return;
+  ctx.drawImage(p.ball, x, y);
 }

@@ -2,19 +2,37 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { getStoredUser, removeUser, type AppUser } from "@/app/data/user";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+import { getProfile, type Profile } from "@/app/data/profile";
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<Profile | null>(null);
 
   useEffect(() => {
-    setUser(getStoredUser());
-  }, [pathname]);
+    const supabase = createClient();
 
-  const isActive = (section: "home" | "biblioteca" | "salon" | "about" | "auth") => {
+    getProfile()
+      .then(setUser)
+      .catch(() => setUser(null));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      getProfile()
+        .then(setUser)
+        .catch(() => setUser(null));
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const isActive = (
+    section: "home" | "biblioteca" | "salon" | "about" | "auth",
+  ) => {
     if (section === "home") return pathname === "/";
     if (section === "biblioteca") return pathname.startsWith("/games");
     if (section === "salon") return pathname === "/hall-of-fame";
@@ -25,9 +43,11 @@ export default function Nav() {
 
   const close = () => setOpen(false);
 
-  const handleSignOut = () => {
-    removeUser();
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     setUser(null);
+    router.push("/");
   };
 
   return (
@@ -44,10 +64,16 @@ export default function Nav() {
           <Link href="/" className={isActive("home") ? "active" : ""}>
             Inicio
           </Link>
-          <Link href="/games" className={isActive("biblioteca") ? "active" : ""}>
+          <Link
+            href="/games"
+            className={isActive("biblioteca") ? "active" : ""}
+          >
             Biblioteca
           </Link>
-          <Link href="/hall-of-fame" className={isActive("salon") ? "active" : ""}>
+          <Link
+            href="/hall-of-fame"
+            className={isActive("salon") ? "active" : ""}
+          >
             Salón de la Fama
           </Link>
           <Link href="/about" className={isActive("about") ? "active" : ""}>
@@ -64,7 +90,7 @@ export default function Nav() {
 
         {user ? (
           <button className="btn ghost auth-btn" onClick={handleSignOut}>
-            {user.name} ▾
+            {user.display_name} ▾
           </button>
         ) : (
           <Link href="/auth" className="btn auth-btn">
@@ -86,26 +112,56 @@ export default function Nav() {
         onClick={close}
       />
       <aside className={"av-mobile-panel" + (open ? " open" : "")}>
-        <div className="pixel neon-cyan" style={{ fontSize: 11, marginBottom: 16 }}>
+        <div
+          className="pixel neon-cyan"
+          style={{ fontSize: 11, marginBottom: 16 }}
+        >
           MENÚ
         </div>
-        <Link href="/" className={isActive("home") ? "active" : ""} onClick={close}>
+        <Link
+          href="/"
+          className={isActive("home") ? "active" : ""}
+          onClick={close}
+        >
           Inicio
         </Link>
-        <Link href="/games" className={isActive("biblioteca") ? "active" : ""} onClick={close}>
+        <Link
+          href="/games"
+          className={isActive("biblioteca") ? "active" : ""}
+          onClick={close}
+        >
           Biblioteca
         </Link>
-        <Link href="/hall-of-fame" className={isActive("salon") ? "active" : ""} onClick={close}>
+        <Link
+          href="/hall-of-fame"
+          className={isActive("salon") ? "active" : ""}
+          onClick={close}
+        >
           Salón de la Fama
         </Link>
-        <Link href="/about" className={isActive("about") ? "active" : ""} onClick={close}>
+        <Link
+          href="/about"
+          className={isActive("about") ? "active" : ""}
+          onClick={close}
+        >
           Acerca de
         </Link>
-        <Link href="/auth" className={isActive("auth") ? "active" : ""} onClick={close}>
+        <Link
+          href="/auth"
+          className={isActive("auth") ? "active" : ""}
+          onClick={close}
+        >
           {user ? "Cuenta" : "Iniciar Sesión"}
         </Link>
         <div style={{ flex: 1 }} />
-        <div className="pixel" style={{ fontSize: 9, color: "var(--ink-faint)", letterSpacing: "0.16em" }}>
+        <div
+          className="pixel"
+          style={{
+            fontSize: 9,
+            color: "var(--ink-faint)",
+            letterSpacing: "0.16em",
+          }}
+        >
           CRÉDITOS · 03
         </div>
       </aside>

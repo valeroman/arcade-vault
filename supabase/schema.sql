@@ -188,3 +188,47 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
 -- left join scores s on s.game_id = g.id
 -- group by g.id;
 -- grant select on games_with_stats to anon;
+
+-- ============================================================
+-- Tabla: profiles (spec 12)
+-- Perfil de jugador ligado a auth.users. display_name es el
+-- nombre público usado para atribuir scores cuando hay sesión.
+-- ============================================================
+create table profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(display_name) between 1 and 20),
+  created_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+create policy "profiles_select_public"
+  on profiles for select
+  to anon, authenticated
+  using (true);
+
+create policy "profiles_update_own"
+  on profiles for update
+  to authenticated
+  using (auth.uid() = id);
+
+-- Auto-crea el profile al registrarse; toma display_name de
+-- raw_user_meta_data (pasado en signUp options.data), con fallback.
+create function handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'display_name', 'PLAYER1')
+  );
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();

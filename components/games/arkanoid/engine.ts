@@ -7,10 +7,16 @@
 
 import {
   loadSpritesheet,
-  drawSprite,
-  drawFrame,
-  EXPLOSION_FRAMES,
+  drawBlock,
+  drawExplosion,
+  drawPaddle,
+  drawBall,
   EXPLOSION_DURATION,
+  BLOCK_RENDER_W,
+  BLOCK_RENDER_H,
+  PADDLE_RENDER_W,
+  PADDLE_RENDER_H,
+  BALL_RENDER,
   type BlockColor,
 } from "./sprites";
 import { getSkin, type Skin, type SkinId } from "../skins";
@@ -34,8 +40,11 @@ const H = 600;
 const PADDLE_SPEED = 400;
 const BLOCK_COLS = 10;
 const BLOCK_ROWS = 6;
-const BLOCK_W = 64;
-const BLOCK_H = 24;
+// Geometría y tamaño de render son el mismo número, y ese número vive en
+// sprites.ts porque es la clave del prerender (los sprites se reescalan una
+// vez a esa medida). Importarlo evita que se desincronicen.
+const BLOCK_W = BLOCK_RENDER_W;
+const BLOCK_H = BLOCK_RENDER_H;
 const BLOCKS_ORIGIN_X = (W - BLOCK_COLS * BLOCK_W) / 2;
 const BLOCKS_ORIGIN_Y = 80;
 const BASE_BALL_VX = 200;
@@ -153,13 +162,43 @@ export function createGame(
 
   // Estado del juego — vive en el closure de esta llamada a createGame,
   // nunca en scope global ni en variables de módulo compartidas.
-  const paddle = { x: 0, y: 560, w: 81, h: 14 };
-  const ball = { x: 0, y: 0, w: 16, h: 16, vx: 200, vy: -300 };
-  const bounceSound = new Audio("/games/arkanoid/sounds/ball-bounce.mp3");
-  const breakSound = new Audio("/games/arkanoid/sounds/break-sound.mp3");
+  const paddle = {
+    x: 0,
+    y: 560,
+    w: PADDLE_RENDER_W,
+    h: PADDLE_RENDER_H,
+  };
+  const ball = {
+    x: 0,
+    y: 0,
+    w: BALL_RENDER,
+    h: BALL_RENDER,
+    vx: 200,
+    vy: -300,
+  };
+
+  // ── Audio ──────────────────────────────────────────────────────────────
+  // Pool de voces creado una sola vez. Antes cada rebote hacía
+  // `cloneNode(true).play()`: un HTMLAudioElement nuevo por colisión (hasta
+  // ~60/s con la bola pegada a una pared), sin ninguna referencia viva, así
+  // que `destroy()` no podía detenerlos y seguían sonando tras desmontar.
+  const VOICES = 4;
+  function makePool(src: string) {
+    const pool: HTMLAudioElement[] = [];
+    for (let i = 0; i < VOICES; i++) pool.push(new Audio(src));
+    return pool;
+  }
+  const bouncePool = makePool("/games/arkanoid/sounds/ball-bounce.mp3");
+  const breakPool = makePool("/games/arkanoid/sounds/break-sound.mp3");
+  let bounceVoice = 0;
+  let breakVoice = 0;
 
   let blocks: Block[] = [];
-  let explosions: Explosion[] = [];
+  let blocksAlive = 0;
+  // Array mutado en sitio (nunca reasignado): el `filter` por frame que había
+  // antes creaba un array + un closure nuevos en cada frame, incluso con cero
+  // explosiones vivas.
+  const explosions: Explosion[] = [];
   let lives = 3;
   let score = 0;
   let gameState: "playing" | "gameover" | "win" = "playing";
@@ -169,12 +208,28 @@ export function createGame(
   // Solo color: la skin no entra en update(), solo en draw().
   let skin: Skin = getSkin(cb.skin, "ladrillos");
   let rafId = 0;
+  let running = false;
   let lastTime: number | null = null;
+
+  // Textos del HUD cacheados: se regeneran solo cuando el valor cambia, no
+  // por frame (eran 2 concatenaciones de string por frame, ~120 allocs/s).
+  let scoreText = "Score: 0";
+  let scoreTextFor = 0;
+  let levelText = "Nivel: 1";
+  let levelTextFor = 1;
 
   const keys: Record<string, boolean> = { ArrowLeft: false, ArrowRight: false };
 
-  function playSound(audio: HTMLAudioElement) {
-    const node = audio.cloneNode(true) as HTMLAudioElement;
+  function playBounce() {
+    const node = bouncePool[bounceVoice];
+    bounceVoice = (bounceVoice + 1) % VOICES;
+    node.currentTime = 0;
+    node.play().catch(() => {});
+  }
+  function playBreak() {
+    const node = breakPool[breakVoice];
+    breakVoice = (breakVoice + 1) % VOICES;
+    node.currentTime = 0;
     node.play().catch(() => {});
   }
 
@@ -193,7 +248,8 @@ export function createGame(
       color: b.color,
       alive: true,
     }));
-    explosions = [];
+    blocksAlive = blocks.length;
+    explosions.length = 0;
     ball.x = paddle.x + (paddle.w - ball.w) / 2;
     ball.y = paddle.y - ball.h;
     ball.vx = BASE_BALL_VX * level.speed;
@@ -212,18 +268,46 @@ export function createGame(
   // ── Input ──────────────────────────────────────────────────────────────
   // Normalizado a e.code (el original usa e.key). Sin control por mouse ni
   // selector de nivel en pausa — decisión confirmada en la Fase 3 de /add-game.
+  /**
+   * Guard de foco: cubre los tres elementos editables/navegables por teclado.
+   * `HTMLSelectElement` es imprescindible acá — el wrapper tiene un `<select>`
+   * de skin en la barra inferior, y con él enfocado las flechas cambiaban de
+   * skin y movían la pala a la vez.
+   */
+  function isTypingTarget(t: EventTarget | null) {
+    return (
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLSelectElement ||
+      t instanceof HTMLTextAreaElement
+    );
+  }
+
   function onKeyDown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement) return;
-    if (e.code in keys) keys[e.code] = true;
-    if ((e.code === "KeyP" || e.code === "Escape") && gameState === "playing") {
-      isPaused = !isPaused;
+    if (isTypingTarget(e.target)) return;
+    if (e.code in keys) {
+      keys[e.code] = true;
+      e.preventDefault(); // sin esto las flechas scrollean la página
+    }
+    if (e.code === "KeyP" || e.code === "Escape") {
+      e.preventDefault();
+      if (gameState === "playing") togglePause();
     }
   }
   function onKeyUp(e: KeyboardEvent) {
-    if (e.code in keys) keys[e.code] = false;
+    if (e.code in keys) {
+      keys[e.code] = false;
+      e.preventDefault();
+    }
+  }
+  /** Suelta las teclas al perder el foco: si no, la pala queda "pegada". */
+  function releaseKeys() {
+    keys.ArrowLeft = false;
+    keys.ArrowRight = false;
   }
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", releaseKeys);
+  document.addEventListener("visibilitychange", releaseKeys);
 
   function update(dt: number) {
     if (gameState !== "playing") return;
@@ -242,17 +326,17 @@ export function createGame(
     if (ball.x <= 0) {
       ball.x = 0;
       ball.vx = Math.abs(ball.vx);
-      playSound(bounceSound);
+      playBounce();
     }
     if (ball.x + ball.w >= W) {
       ball.x = W - ball.w;
       ball.vx = -Math.abs(ball.vx);
-      playSound(bounceSound);
+      playBounce();
     }
     if (ball.y <= 0) {
       ball.y = 0;
       ball.vy = Math.abs(ball.vy);
-      playSound(bounceSound);
+      playBounce();
     }
 
     // Paddle bounce
@@ -265,14 +349,16 @@ export function createGame(
     ) {
       ball.y = paddle.y - ball.h;
       ball.vy = -Math.abs(ball.vy);
-      playSound(bounceSound);
+      playBounce();
     }
 
     // Block collisions — uno por frame, igual que el original.
-    for (const block of blocks) {
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
       if (!block.alive) continue;
       if (collideAABB(block)) {
         block.alive = false;
+        blocksAlive--;
         explosions.push({
           x: block.x,
           y: block.y,
@@ -282,9 +368,32 @@ export function createGame(
           elapsed: 0,
         });
         score += 10;
-        ball.vy = -ball.vy;
-        playSound(breakSound);
-        if (blocks.every((b) => !b.alive)) {
+        // Resolución del impacto por eje de menor penetración, con corrección
+        // posicional (puerta G10). Antes se invertía `vy` siempre y sin sacar
+        // la bola del solapamiento: un impacto lateral la devolvía en la
+        // dirección equivocada y, al quedar dentro del hueco, podía volver a
+        // colisionar con el bloque vecino en el frame siguiente (zigzag +
+        // sonido repetido). Ahora se decide el eje comparando cuánto ha
+        // penetrado en cada uno y se reposiciona justo fuera del bloque.
+        const overlapX = Math.min(
+          ball.x + ball.w - block.x,
+          block.x + block.w - ball.x,
+        );
+        const overlapY = Math.min(
+          ball.y + ball.h - block.y,
+          block.y + block.h - ball.y,
+        );
+        if (overlapX < overlapY) {
+          // Impacto lateral: invierte vx y expulsa por el lado de entrada.
+          ball.x = ball.vx > 0 ? block.x - ball.w : block.x + block.w;
+          ball.vx = -ball.vx;
+        } else {
+          // Impacto vertical: el caso de siempre, ahora con la bola fuera.
+          ball.y = ball.vy > 0 ? block.y - ball.h : block.y + block.h;
+          ball.vy = -ball.vy;
+        }
+        playBreak();
+        if (blocksAlive === 0) {
           if (currentLevel < 5) {
             loadLevel(currentLevel + 1);
           } else {
@@ -296,9 +405,17 @@ export function createGame(
       }
     }
 
-    // Explosions
-    for (const exp of explosions) exp.elapsed += dt * 1000;
-    explosions = explosions.filter((exp) => exp.elapsed < EXPLOSION_DURATION);
+    // Explosions — envejecidas y compactadas en sitio, sin array intermedio.
+    let write = 0;
+    for (let i = 0; i < explosions.length; i++) {
+      const exp = explosions[i];
+      exp.elapsed += dt * 1000;
+      if (exp.elapsed < EXPLOSION_DURATION) {
+        if (write !== i) explosions[write] = exp;
+        write++;
+      }
+    }
+    explosions.length = write;
 
     // Ball lost
     if (ball.y > H) {
@@ -317,7 +434,11 @@ export function createGame(
     }
   }
 
+  // `save()`/`restore()` alrededor del overlay: `font`/`textAlign`/
+  // `textBaseline` quedaban puestos al salir y solo sobrevivían por la
+  // reasignación exhaustiva del HUD. Ahora no fuga estado al frame siguiente.
   function drawOverlay(message: string) {
+    ctx.save();
     ctx.fillStyle = skin.overlay;
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = skin.fg;
@@ -325,57 +446,53 @@ export function createGame(
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(message, W / 2, H / 2);
+    ctx.restore();
   }
+
+  const LIVES_BALL_SPACING = 4;
 
   function draw() {
     ctx.fillStyle = skin.bg;
     ctx.fillRect(0, 0, W, H);
 
-    for (const block of blocks) {
-      if (block.alive)
-        drawSprite(
-          ctx,
-          `block_${block.color}`,
-          block.x,
-          block.y,
-          block.w,
-          block.h,
-          skin,
-        );
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (block.alive) drawBlock(ctx, block.color, block.x, block.y, skin);
     }
 
-    for (const exp of explosions) {
+    for (let i = 0; i < explosions.length; i++) {
+      const exp = explosions[i];
       const frameIndex = Math.min(
         Math.floor((exp.elapsed / EXPLOSION_DURATION) * 4),
         3,
       );
-      drawFrame(
-        ctx,
-        EXPLOSION_FRAMES[exp.color][frameIndex],
-        exp.x,
-        exp.y,
-        exp.w,
-        exp.h,
-        skin,
-      );
+      drawExplosion(ctx, exp.color, frameIndex, exp.x, exp.y, skin);
     }
 
-    drawSprite(ctx, "paddle", paddle.x, paddle.y, paddle.w, paddle.h, skin);
-    drawSprite(ctx, "ball", ball.x, ball.y, ball.w, ball.h, skin);
+    drawPaddle(ctx, paddle.x, paddle.y, skin);
+    drawBall(ctx, ball.x, ball.y, skin);
 
     if (gameState === "playing") {
+      ctx.save();
       ctx.fillStyle = skin.fg;
       ctx.font = "bold 18px monospace";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText("Score: " + score, 10, 10);
+      if (scoreTextFor !== score) {
+        scoreTextFor = score;
+        scoreText = "Score: " + score;
+      }
+      if (levelTextFor !== currentLevel) {
+        levelTextFor = currentLevel;
+        levelText = "Nivel: " + currentLevel;
+      }
+      ctx.fillText(scoreText, 10, 10);
       ctx.textAlign = "center";
-      ctx.fillText("Nivel: " + currentLevel, W / 2, 10);
-      const ballSize = 16;
-      const ballSpacing = 4;
+      ctx.fillText(levelText, W / 2, 10);
+      ctx.restore();
       for (let i = 0; i < lives; i++) {
-        const bx = W - 10 - (lives - i) * (ballSize + ballSpacing);
-        drawSprite(ctx, "ball", bx, 10, ballSize, ballSize, skin);
+        const bx = W - 10 - (lives - i) * (BALL_RENDER + LIVES_BALL_SPACING);
+        drawBall(ctx, bx, 10, skin);
       }
     }
 
@@ -384,6 +501,12 @@ export function createGame(
     if (isPaused && gameState === "playing") drawOverlay("PAUSA");
   }
 
+  /**
+   * El loop se detiene en pausa y en fin de partida en vez de repintar la
+   * escena completa a 60fps detrás del modal de React (mismo patrón que
+   * `tetris/engine.ts:344,362,380-381`). Dibuja el frame final —el que lleva
+   * el overlay— y recién entonces corta el rAF.
+   */
   function loop(ts: number) {
     // Clamp de dt a 50ms (el original no lo tiene) — evita "spiral of
     // death" en cambios de pestaña, igual que Asteroids/Tetris.
@@ -391,7 +514,33 @@ export function createGame(
     lastTime = ts;
     update(dt);
     draw();
+    if (destroyed || gameState !== "playing" || isPaused) {
+      running = false;
+      return;
+    }
     rafId = requestAnimationFrame(loop);
+  }
+
+  /** Arranca (o reanuda) el loop. Idempotente: nunca deja dos rAF vivos. */
+  function start() {
+    if (destroyed || running) return;
+    running = true;
+    lastTime = null; // dt = 0 en el primer frame: no salta al reanudar
+    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function togglePause() {
+    isPaused = !isPaused;
+    if (isPaused) {
+      // Pinta el overlay "PAUSA" en el acto y corta el frame ya agendado, en
+      // vez de esperar una vuelta más del loop para detenerlo.
+      draw();
+      running = false;
+      cancelAnimationFrame(rafId);
+    } else {
+      start();
+    }
   }
 
   function initGame() {
@@ -399,31 +548,43 @@ export function createGame(
     score = 0;
     gameState = "playing";
     isPaused = false;
-    lastTime = null;
     initPaddle();
     loadLevel(1);
+    start();
   }
 
   function startAfterLoad() {
     if (destroyed) return; // destroy() llegó antes de que cargara la imagen
     initGame();
-    rafId = requestAnimationFrame(loop);
   }
 
   loadSpritesheet(startAfterLoad);
 
   return {
     restart: () => {
+      if (destroyed) return;
       initGame();
     },
     setSkin: (id: SkinId) => {
+      if (destroyed) return;
       skin = getSkin(id, "ladrillos");
+      // Con el loop detenido (pausa o fin de partida) nadie repintaría: un
+      // repintado puntual mantiene el cambio de skin en caliente sin
+      // reactivar el rAF.
+      if (!running) draw();
     },
     destroy: () => {
       destroyed = true;
+      running = false;
       cancelAnimationFrame(rafId);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releaseKeys);
+      document.removeEventListener("visibilitychange", releaseKeys);
+      // Corta cualquier voz en vuelo: los clones anteriores sobrevivían al
+      // desmontaje y seguían sonando fuera de la pantalla del juego.
+      for (const node of bouncePool) node.pause();
+      for (const node of breakPool) node.pause();
     },
   };
 }

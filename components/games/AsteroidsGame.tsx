@@ -10,7 +10,6 @@ import {
   type SkinId,
   getSkin,
   readSkin,
-  withAlpha,
   writeSkin,
 } from "@/components/games/skins";
 import TouchControls, {
@@ -32,6 +31,12 @@ const TOUCH_BUTTONS: TouchButton[] = [
 export default function AsteroidsGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const restartRef = useRef<(() => void) | null>(null);
+  /**
+   * Repinta un frame suelto. Hace falta porque el loop se detiene en game over
+   * (puerta G1): sin esto, cambiar de skin con la partida terminada dejaría el
+   * canvas congelado con la paleta anterior.
+   */
+  const redrawRef = useRef<(() => void) | null>(null);
 
   // El motor de Asteroids sigue inline (ver "Known deviations"), así que la skin
   // activa vive en una ref mutable que cada draw() lee: cambiarla no remonta el
@@ -50,6 +55,7 @@ export default function AsteroidsGame() {
     writeSkin(id);
     skinRef.current = getSkin(id);
     setSkinId(id);
+    redrawRef.current?.();
   };
 
   const [finalScore, setFinalScore] = useState<number | null>(null);
@@ -92,16 +98,41 @@ export default function AsteroidsGame() {
     const keys: Record<string, boolean> = {};
     const justPressed: Record<string, boolean> = {};
 
+    /** Teclas que el juego consume: se les cancela el scroll de la página. */
+    const CONSUMED = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "Space"]);
+
+    /**
+     * El guard de foco cubre los tres elementos editables/navegables con
+     * teclado: el `<input>` del nombre en el modal y el `<select>` de skin de
+     * la barra inferior (con él enfocado, las flechas cambiaban de skin y
+     * pilotaban la nave a la vez).
+     */
+    const isFormTarget = (t: EventTarget | null) =>
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLSelectElement ||
+      t instanceof HTMLTextAreaElement;
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (isFormTarget(e.target)) return;
+      if (CONSUMED.has(e.code)) e.preventDefault();
       if (!keys[e.code]) justPressed[e.code] = true;
       keys[e.code] = true;
     };
     const onKeyUp = (e: KeyboardEvent) => {
       keys[e.code] = false;
     };
+    /**
+     * Al perder el foco (Alt-Tab, cambio de pestaña) el `keyup` nunca llega:
+     * sin esto la nave volvía acelerando o girando sola.
+     */
+    const clearKeys = () => {
+      for (const code in keys) keys[code] = false;
+      for (const code in justPressed) justPressed[code] = false;
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearKeys);
+    document.addEventListener("visibilitychange", clearKeys);
 
     function pressed(code: string) {
       const val = justPressed[code];
@@ -111,12 +142,37 @@ export default function AsteroidsGame() {
 
     // ── Utils ─────────────────────────────────────────────────────────────
     const wrap = (v: number, max: number) => ((v % max) + max) % max;
+
+    /**
+     * Separación en un eje que envuelve: nave, balas, asteroides y power-ups
+     * pasan todos por `wrap()`, así que el mundo es un toro y la distancia real
+     * entre dos puntos es la menor de las dos rutas (directa o por el borde).
+     * Con la resta euclídea a secas, un asteroide partido por el borde era
+     * intocable: las balas lo atravesaban y la nave lo cruzaba sin morir.
+     */
+    const axisDist = (d: number, max: number) => {
+      const a = d < 0 ? -d : d;
+      return a > max / 2 ? max - a : a;
+    };
     const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-      Math.hypot(a.x - b.x, a.y - b.y);
+      Math.hypot(axisDist(a.x - b.x, W), axisDist(a.y - b.y, H));
     const rand = (min: number, max: number) =>
       min + Math.random() * (max - min);
     const randInt = (min: number, max: number) =>
       Math.floor(rand(min, max + 1));
+
+    /**
+     * Elimina en sitio los elementos muertos, preservando el orden. Sustituye a
+     * `arr = arr.filter(x => !x.dead)`, que asignaba un array nuevo más un
+     * closure por lista y por frame (5 listas × 60 fps).
+     */
+    function compact<T extends { dead: boolean }>(arr: T[]) {
+      let w = 0;
+      for (let i = 0; i < arr.length; i++) {
+        if (!arr[i].dead) arr[w++] = arr[i];
+      }
+      arr.length = w;
+    }
 
     // ── Constants ─────────────────────────────────────────────────────────
     const POWERUP_DROP_CHANCE = 0.15;
@@ -207,12 +263,11 @@ export default function AsteroidsGame() {
         this.rot += this.rotSpeed * dt;
       }
 
-      split(): Asteroid[] {
-        if (this.size <= 1) return [];
-        return [
-          new Asteroid(this.x, this.y, this.size - 1),
-          new Asteroid(this.x, this.y, this.size - 1),
-        ];
+      /** Empuja los fragmentos en `out` en vez de devolver un array nuevo. */
+      splitInto(out: Asteroid[]) {
+        if (this.size <= 1) return;
+        out.push(new Asteroid(this.x, this.y, this.size - 1));
+        out.push(new Asteroid(this.x, this.y, this.size - 1));
       }
 
       draw() {
@@ -274,11 +329,16 @@ export default function AsteroidsGame() {
         const r = this.radius * pulse;
         ctx!.strokeRect(-r, -r, r * 2, r * 2);
         ctx!.restore();
+        // `font`/`textAlign`/`textBaseline` quedaban puestos al salir de acá y
+        // nadie los restauraba: desde el primer power-up, todo el texto del
+        // resto de la sesión (HUD y overlay) se dibujaba con baseline "middle".
+        ctx!.save();
         ctx!.fillStyle = palette().accent;
         ctx!.font = "bold 12px monospace";
         ctx!.textAlign = "center";
         ctx!.textBaseline = "middle";
         ctx!.fillText("3x", this.x, this.y);
+        ctx!.restore();
       }
     }
 
@@ -333,26 +393,33 @@ export default function AsteroidsGame() {
           this.vy += Math.sin(this.angle) * THRUST * dt;
         }
 
-        this.vx *= DRAG;
-        this.vy *= DRAG;
+        // DRAG está expresado por frame a 60Hz. Aplicado tal cual una vez por
+        // llamada, la velocidad terminal dependía del refresh rate (333 px/s a
+        // 60Hz, 139 a 144Hz, 667 a 30Hz). Reexpresado como factor por segundo,
+        // `DRAG ** (dt * 60)` vale exactamente DRAG cuando dt = 1/60 (error 0),
+        // así que el feel a 60Hz —el framerate con el que se diseñó— no cambia:
+        // solo deja de degradarse en el resto del hardware (332 px/s a 144Hz).
+        const drag = Math.pow(DRAG, dt * 60);
+        this.vx *= drag;
+        this.vy *= drag;
         this.x = wrap(this.x + this.vx * dt, W);
         this.y = wrap(this.y + this.vy * dt, H);
       }
 
-      tryShoot(): Bullet[] {
-        if (this.shootCooldown > 0 || this.dead) return [];
+      /** Empuja los proyectiles en `out`: evita el array + spread por disparo. */
+      shootInto(out: Bullet[]) {
+        if (this.shootCooldown > 0 || this.dead) return;
         this.shootCooldown = 0.2;
         const NOSE = 21;
         const ox = this.x + Math.cos(this.angle) * NOSE;
         const oy = this.y + Math.sin(this.angle) * NOSE;
         if (this.tripleShot > 0) {
-          return [
-            new Bullet(ox, oy, this.angle - TRIPLE_SPREAD),
-            new Bullet(ox, oy, this.angle),
-            new Bullet(ox, oy, this.angle + TRIPLE_SPREAD),
-          ];
+          out.push(new Bullet(ox, oy, this.angle - TRIPLE_SPREAD));
+          out.push(new Bullet(ox, oy, this.angle));
+          out.push(new Bullet(ox, oy, this.angle + TRIPLE_SPREAD));
+          return;
         }
-        return [new Bullet(ox, oy, this.angle)];
+        out.push(new Bullet(ox, oy, this.angle));
       }
 
       draw() {
@@ -420,10 +487,15 @@ export default function AsteroidsGame() {
         if (this.ttl <= 0) this.dead = true;
       }
 
+      /**
+       * `strokeStyle`/`lineWidth` los fija `drawParticles()` una vez para todo
+       * el lote y el desvanecido va por `globalAlpha` en vez de por
+       * `withAlpha()`, que construía ~6 objetos (match del regex, 3 `slice`,
+       * el `toFixed` y el template literal) por partícula y por frame — hasta
+       * 700 allocs/frame en el peor caso. El compuesto resultante es idéntico.
+       */
       draw() {
-        const alpha = this.ttl / this.life;
-        ctx!.strokeStyle = withAlpha(palette().fg, alpha);
-        ctx!.lineWidth = 1;
+        ctx!.globalAlpha = this.ttl / this.life;
         ctx!.beginPath();
         ctx!.moveTo(this.x, this.y);
         ctx!.lineTo(this.x - this.vx * 0.05, this.y - this.vy * 0.05);
@@ -432,11 +504,16 @@ export default function AsteroidsGame() {
     }
 
     // ── Estado del juego ──────────────────────────────────────────────────
+    // Las 5 listas son estables durante toda la sesión: se vacían con
+    // `length = 0` y se compactan en sitio, nunca se reasignan. Así ni el
+    // update ni el draw asignan un array por frame.
     let ship: Ship;
-    let bullets: Bullet[];
-    let asteroids: Asteroid[];
-    let particles: Particle[];
-    let powerUps: PowerUp[];
+    const bullets: Bullet[] = [];
+    const asteroids: Asteroid[] = [];
+    const particles: Particle[] = [];
+    const powerUps: PowerUp[] = [];
+    /** Fragmentos de los asteroides partidos en este frame (buffer reusado). */
+    const pendingAsteroids: Asteroid[] = [];
     let score: number;
     let lives: number;
     let level: number;
@@ -444,6 +521,8 @@ export default function AsteroidsGame() {
     let deadTimer: number;
     let powerUpSpawned: boolean;
     let killsSinceSpawn: number;
+    /** Subtítulo del overlay de game over, construido una vez en `killShip()`. */
+    let overlaySub = "";
 
     function spawnAsteroids(count: number) {
       const SAFE_DIST = 130;
@@ -459,10 +538,11 @@ export default function AsteroidsGame() {
 
     function initGame() {
       ship = new Ship();
-      bullets = [];
-      asteroids = [];
-      particles = [];
-      powerUps = [];
+      bullets.length = 0;
+      asteroids.length = 0;
+      particles.length = 0;
+      powerUps.length = 0;
+      pendingAsteroids.length = 0;
       powerUpSpawned = false;
       killsSinceSpawn = 0;
       score = 0;
@@ -480,9 +560,9 @@ export default function AsteroidsGame() {
 
     function nextLevel() {
       level++;
-      bullets = [];
-      particles = [];
-      powerUps = [];
+      bullets.length = 0;
+      particles.length = 0;
+      powerUps.length = 0;
       powerUpSpawned = false;
       killsSinceSpawn = 0;
       ship.reset();
@@ -499,6 +579,7 @@ export default function AsteroidsGame() {
       lives--;
       if (lives <= 0) {
         state = "gameover";
+        overlaySub = `PUNTAJE: ${score}   —   ESPACIO PARA REINICIAR`;
         setFinalScore(score);
       } else {
         state = "dead";
@@ -507,18 +588,23 @@ export default function AsteroidsGame() {
     }
 
     // ── Update ──────────────────────────────────────────────────────────────
+    // Todos los recorridos son `for` con índice: `forEach`/`filter` asignaban
+    // un closure (y un array, en el caso de `filter`) por lista y por frame.
+    function updateParticles(dt: number) {
+      for (let i = 0; i < particles.length; i++) particles[i].update(dt);
+      compact(particles);
+    }
+
     function update(dt: number) {
       if (state === "gameover") {
-        particles.forEach((p) => p.update(dt));
-        particles = particles.filter((p) => !p.dead);
+        updateParticles(dt);
         return;
       }
 
       if (state === "dead") {
         deadTimer -= dt;
-        particles.forEach((p) => p.update(dt));
-        particles = particles.filter((p) => !p.dead);
-        asteroids.forEach((a) => a.update(dt));
+        updateParticles(dt);
+        for (let i = 0; i < asteroids.length; i++) asteroids[i].update(dt);
         if (deadTimer <= 0) {
           state = "playing";
           ship.reset();
@@ -528,20 +614,20 @@ export default function AsteroidsGame() {
 
       // Disparar
       if (pressed("Space")) {
-        bullets.push(...ship.tryShoot());
+        ship.shootInto(bullets);
       }
 
       ship.update(dt);
-      bullets.forEach((b) => b.update(dt));
-      asteroids.forEach((a) => a.update(dt));
-      particles.forEach((p) => p.update(dt));
-      powerUps.forEach((p) => p.update(dt));
+      for (let i = 0; i < bullets.length; i++) bullets[i].update(dt);
+      for (let i = 0; i < asteroids.length; i++) asteroids[i].update(dt);
+      for (let i = 0; i < powerUps.length; i++) powerUps[i].update(dt);
+      updateParticles(dt);
 
-      bullets = bullets.filter((b) => !b.dead);
-      particles = particles.filter((p) => !p.dead);
-      powerUps = powerUps.filter((p) => !p.dead);
+      compact(bullets);
+      compact(powerUps);
 
-      for (const p of powerUps) {
+      for (let i = 0; i < powerUps.length; i++) {
+        const p = powerUps[i];
         if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
           p.dead = true;
           ship.tripleShot = POWERUP_DURATION;
@@ -549,15 +635,18 @@ export default function AsteroidsGame() {
       }
 
       // Bala vs asteroide
-      const newAsteroids: Asteroid[] = [];
-      for (const b of bullets) {
-        for (const a of asteroids) {
-          if (!a.dead && !b.dead && dist(b, a) < a.radius) {
+      for (let bi = 0; bi < bullets.length; bi++) {
+        const b = bullets[bi];
+        for (let ai = 0; ai < asteroids.length; ai++) {
+          const a = asteroids[ai];
+          // El radio de la bala (2px) entra en el test: antes solo contaba el
+          // del asteroide, así que un roce en el borde exacto no registraba.
+          if (!a.dead && !b.dead && dist(b, a) < a.radius + b.radius) {
             b.dead = true;
             a.dead = true;
             score += POINTS[a.size];
             explode(a.x, a.y, a.size * 5);
-            newAsteroids.push(...a.split());
+            a.splitInto(pendingAsteroids);
             if (!powerUpSpawned) {
               killsSinceSpawn++;
               const guaranteed = killsSinceSpawn >= 5;
@@ -569,12 +658,16 @@ export default function AsteroidsGame() {
           }
         }
       }
-      asteroids = asteroids.filter((a) => !a.dead).concat(newAsteroids);
-      bullets = bullets.filter((b) => !b.dead);
+      compact(asteroids);
+      for (let i = 0; i < pendingAsteroids.length; i++)
+        asteroids.push(pendingAsteroids[i]);
+      pendingAsteroids.length = 0;
+      compact(bullets);
 
       // Nave vs asteroide
       if (ship.invincible <= 0) {
-        for (const a of asteroids) {
+        for (let i = 0; i < asteroids.length; i++) {
+          const a = asteroids[i];
           if (dist(ship, a) < ship.radius + a.radius * 0.82) {
             killShip();
             break;
@@ -587,95 +680,184 @@ export default function AsteroidsGame() {
     }
 
     // ── Draw ────────────────────────────────────────────────────────────────
-    function drawLifeIcon(x: number, y: number) {
+    /**
+     * Los iconos de vida son 14 ops vectoriales idénticas cada uno, repintadas
+     * igual en todos los frames (42 ops/frame con 3 vidas). Se prerenderizan
+     * una vez por color de skin en un canvas offscreen — mismo patrón de caché
+     * por skin que `arkanoid/sprites.ts` — y el frame solo paga 3 `drawImage`.
+     *
+     * El offscreen usa el mismo encadenado `translate(centro)` + `rotate` que el
+     * dibujo directo y se blitea en offsets enteros, así que el antialiasing
+     * resultante es idéntico píxel a píxel al de antes.
+     */
+    const LIFE_ICON = 24;
+    const lifeIcons = new Map<string, HTMLCanvasElement>();
+
+    function lifeIcon(color: string) {
+      const cached = lifeIcons.get(color);
+      if (cached) return cached;
+      const off = document.createElement("canvas");
+      off.width = LIFE_ICON;
+      off.height = LIFE_ICON;
+      const g = off.getContext("2d")!;
+      g.translate(LIFE_ICON / 2, LIFE_ICON / 2);
+      g.rotate(-Math.PI / 2);
+      g.strokeStyle = color;
+      g.lineWidth = 1.2;
+      g.lineJoin = "round";
+      g.beginPath();
+      g.moveTo(9, 0);
+      g.lineTo(-6, -5);
+      g.lineTo(-3, 0);
+      g.lineTo(-6, 5);
+      g.closePath();
+      g.stroke();
+      lifeIcons.set(color, off);
+      return off;
+    }
+
+    // Textos del HUD cacheados: se reconstruyen solo cuando cambia el valor que
+    // muestran, no en cada frame.
+    let scoreText = "";
+    let scoreShown = -1;
+    let levelText = "";
+    let levelShown = -1;
+    let tripleText = "";
+    let tripleShown = -1;
+
+    function drawHUD() {
+      if (score !== scoreShown) {
+        scoreShown = score;
+        scoreText = `SCORE  ${score}`;
+      }
+      if (level !== levelShown) {
+        levelShown = level;
+        levelText = `NIVEL ${level}`;
+      }
+
+      // El HUD es el último que escribe `font`/`textAlign`/`textBaseline` en el
+      // frame. Hoy sobrevive por reasignación exhaustiva, pero eso es fragilidad
+      // latente (puerta G5): el `save()`/`restore()` lo deja aislado, igual que
+      // en Frogger y Arkanoid.
       ctx!.save();
-      ctx!.translate(x, y);
-      ctx!.rotate(-Math.PI / 2);
-      ctx!.strokeStyle = palette().fg;
-      ctx!.lineWidth = 1.2;
-      ctx!.lineJoin = "round";
-      ctx!.beginPath();
-      ctx!.moveTo(9, 0);
-      ctx!.lineTo(-6, -5);
-      ctx!.lineTo(-3, 0);
-      ctx!.lineTo(-6, 5);
-      ctx!.closePath();
-      ctx!.stroke();
+      ctx!.fillStyle = palette().fg;
+      ctx!.font = "15px monospace";
+      ctx!.textBaseline = "alphabetic";
+
+      ctx!.textAlign = "left";
+      ctx!.fillText(scoreText, 14, 26);
+
+      ctx!.textAlign = "center";
+      ctx!.fillText(levelText, W / 2, 26);
+
+      const icon = lifeIcon(palette().fg);
+      for (let i = 0; i < lives; i++)
+        ctx!.drawImage(
+          icon,
+          W - 16 - i * 22 - LIFE_ICON / 2,
+          18 - LIFE_ICON / 2,
+        );
+
+      if (ship.tripleShot > 0) {
+        // Cuantizado a la décima que ya mostraba `toFixed(1)`: mismo texto,
+        // reconstruido ~10 veces por segundo en vez de 60.
+        const tenths = Math.round(ship.tripleShot * 10);
+        if (tenths !== tripleShown) {
+          tripleShown = tenths;
+          tripleText = `3x  ${(tenths / 10).toFixed(1)}s`;
+        }
+        ctx!.textAlign = "left";
+        ctx!.fillStyle = palette().accent;
+        ctx!.fillText(tripleText, 14, 46);
+      }
       ctx!.restore();
     }
 
-    function drawHUD() {
-      ctx!.fillStyle = palette().fg;
-      ctx!.font = "15px monospace";
-
-      ctx!.textAlign = "left";
-      ctx!.fillText(`SCORE  ${score}`, 14, 26);
-
-      ctx!.textAlign = "center";
-      ctx!.fillText(`NIVEL ${level}`, W / 2, 26);
-
-      for (let i = 0; i < lives; i++) drawLifeIcon(W - 16 - i * 22, 18);
-
-      if (ship.tripleShot > 0) {
-        ctx!.textAlign = "left";
-        ctx!.fillStyle = palette().accent;
-        ctx!.fillText(`3x  ${ship.tripleShot.toFixed(1)}s`, 14, 46);
-      }
-    }
-
     function drawOverlay(title: string, sub: string) {
+      ctx!.save();
       // En `clasico` el velo es transparente: el original no oscurecía la escena.
       ctx!.fillStyle = palette().overlay;
       ctx!.fillRect(0, 0, W, H);
 
       ctx!.textAlign = "center";
+      ctx!.textBaseline = "alphabetic";
       ctx!.fillStyle = palette().fg;
       ctx!.font = "bold 46px monospace";
       ctx!.fillText(title, W / 2, H / 2 - 18);
       ctx!.font = "18px monospace";
       ctx!.fillStyle = palette().dim;
       ctx!.fillText(sub, W / 2, H / 2 + 22);
+      ctx!.restore();
+    }
+
+    function drawParticles() {
+      if (particles.length === 0) return;
+      // Un solo `strokeStyle`/`lineWidth` para todo el lote; el desvanecido de
+      // cada partícula va por `globalAlpha`, que `restore()` devuelve a 1.
+      ctx!.save();
+      ctx!.strokeStyle = palette().fg;
+      ctx!.lineWidth = 1;
+      for (let i = 0; i < particles.length; i++) particles[i].draw();
+      ctx!.restore();
     }
 
     function draw() {
       ctx!.fillStyle = palette().bg;
       ctx!.fillRect(0, 0, W, H);
 
-      particles.forEach((p) => p.draw());
-      asteroids.forEach((a) => a.draw());
-      powerUps.forEach((p) => p.draw());
-      bullets.forEach((b) => b.draw());
+      drawParticles();
+      for (let i = 0; i < asteroids.length; i++) asteroids[i].draw();
+      for (let i = 0; i < powerUps.length; i++) powerUps[i].draw();
+      for (let i = 0; i < bullets.length; i++) bullets[i].draw();
       ship.draw();
 
       drawHUD();
 
-      if (state === "gameover")
-        drawOverlay(
-          "GAME OVER",
-          `PUNTAJE: ${score}   —   ESPACIO PARA REINICIAR`,
-        );
+      if (state === "gameover") drawOverlay("GAME OVER", overlaySub);
     }
 
     // ── Loop principal ───────────────────────────────────────────────────────
     let lastTime: number | null = null;
-    let rafId: number;
+    let rafId = 0;
 
     function loop(ts: number) {
       const dt = lastTime === null ? 0 : Math.min((ts - lastTime) / 1000, 0.05);
       lastTime = ts;
       update(dt);
       draw();
+      // En game over, apagada la última partícula de la explosión final, ya no
+      // queda nada que animar: la escena y el overlay están dibujados en el
+      // canvas y se quedan ahí. Antes se repintaban 60 veces por segundo
+      // (indefinidamente, detrás del modal de React, mientras el jugador
+      // escribe su nombre). Mismo patrón que `tetris/engine.ts:362`.
+      if (state === "gameover" && particles.length === 0) return;
       rafId = requestAnimationFrame(loop);
     }
 
-    restartRef.current = initGame;
+    // Cancel-then-request: reiniciar con el loop todavía vivo (botón "JUGAR DE
+    // NUEVO" antes de que se apaguen las partículas) no deja dos rAF corriendo.
+    function start() {
+      cancelAnimationFrame(rafId);
+      lastTime = null;
+      rafId = requestAnimationFrame(loop);
+    }
+
+    restartRef.current = () => {
+      initGame();
+      start();
+    };
+    redrawRef.current = draw;
     initGame();
-    rafId = requestAnimationFrame(loop);
+    start();
 
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearKeys);
+      document.removeEventListener("visibilitychange", clearKeys);
+      restartRef.current = null;
+      redrawRef.current = null;
     };
   }, []);
 

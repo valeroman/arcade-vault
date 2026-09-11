@@ -81,8 +81,31 @@ export function loadSpritesheet(cb: () => void) {
     ssCallbacks = [];
     callbacks.forEach((f) => f());
   };
-  loadingImg.onerror = () => console.error("Failed to load fruits spritesheet");
+  loadingImg.onerror = () => {
+    console.error("Failed to load fruits spritesheet");
+    // Libera el guard para que un montaje posterior pueda reintentar la
+    // descarga. Los callbacks encolados siguen en `ssCallbacks` y se
+    // dispararán con el reintento; `startAfterLoad` ya descarta los de
+    // motores destruidos con su flag `destroyed`.
+    loadingImg = null;
+  };
   loadingImg.src = "/games/snake/fruits.png";
+}
+
+// ── Prerender cacheado ───────────────────────────────────────────────────
+// Los dos dibujos de fruta (el recorte del PNG y la primitiva de las skins
+// neon/retro) son invariantes: dependen de la fruta, del tamaño de celda y
+// de los colores de la skin, nunca de la posición ni del frame. Se rasterizan
+// una vez a un canvas offscreen cacheado a nivel de módulo — mismo patrón que
+// `arkanoid/sprites.ts:133`, es asset derivado, no estado de partida — y cada
+// frame pasa a ser un `drawImage` 1:1 sin remuestreo ni `shadowBlur`.
+const prerendered = new Map<string, HTMLCanvasElement>();
+
+function makeOffscreen(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  return c;
 }
 
 /**
@@ -108,6 +131,38 @@ export function drawFruitPrimitive(
 ) {
   const index = Math.max(0, FRUIT_NAMES.indexOf(name));
   const fill = palette[index % palette.length] ?? stemColor;
+
+  // El `shadowBlur` se desborda de la celda, así que el offscreen lleva un
+  // margen que lo contiene y se blitea corrido (`x - pad`): los píxeles
+  // resultantes son los mismos que pintaba el trazado directo.
+  const pad = Math.ceil(w * 0.28) * 2 + 4;
+  const key = `prim|${name}|${w}x${h}|${fill}|${stemColor}`;
+  let cached = prerendered.get(key);
+  if (!cached) {
+    cached = makeOffscreen(w + pad * 2, h + pad * 2);
+    const octx = cached.getContext("2d");
+    if (!octx) {
+      // Sin contexto offscreen, se pinta directo (comportamiento anterior).
+      paintFruitPrimitive(ctx, x, y, w, h, index, fill, stemColor);
+      return;
+    }
+    paintFruitPrimitive(octx, pad, pad, w, h, index, fill, stemColor);
+    prerendered.set(key, cached);
+  }
+  ctx.drawImage(cached, x - pad, y - pad);
+}
+
+/** Trazado real de la fruta procedural. Solo lo llama el prerender. */
+function paintFruitPrimitive(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  index: number,
+  fill: string,
+  stemColor: string,
+) {
   const cx = x + w / 2;
   const cy = y + h / 2 + h * 0.06;
 
@@ -171,6 +226,24 @@ export function drawSprite(
   h: number,
 ) {
   if (!ssLoaded || !ssImg) return;
-  const sp = FRUIT_SPRITES[name];
-  ctx.drawImage(ssImg, sp.sx, sp.sy, sp.sw, sp.sh, x, y, w, h);
+
+  // El recorte de la hoja es de ~110-170×160 px y la celda es de 30×30: el
+  // downscale (con el filtrado bilineal del default `imageSmoothingEnabled`)
+  // se hacía en cada frame. Ahora se hace una vez por fruta y tamaño, con el
+  // mismo `sw`/`sh` de origen y el mismo destino, así que el resultado es
+  // idéntico píxel a píxel.
+  const key = `png|${name}|${w}x${h}`;
+  let cached = prerendered.get(key);
+  if (!cached) {
+    const sp = FRUIT_SPRITES[name];
+    cached = makeOffscreen(w, h);
+    const octx = cached.getContext("2d");
+    if (!octx) {
+      ctx.drawImage(ssImg, sp.sx, sp.sy, sp.sw, sp.sh, x, y, w, h);
+      return;
+    }
+    octx.drawImage(ssImg, sp.sx, sp.sy, sp.sw, sp.sh, 0, 0, w, h);
+    prerendered.set(key, cached);
+  }
+  ctx.drawImage(cached, x, y);
 }

@@ -84,6 +84,53 @@ const LINE_SCORES = [0, 100, 300, 500, 800];
 // `--grid-line` vía getComputedStyle como en el original: la plataforma no
 // tiene toggle de tema y el canvas no debe depender del CSS computado.
 
+/**
+ * Fondo + grilla prerenderizados, cacheados a nivel de **módulo** por
+ * `skin.id` — mismo patrón que el offscreen por skin de `arkanoid/sprites.ts`.
+ * Es un asset derivado, no estado de partida: sus únicas entradas son la skin
+ * y las constantes `COLS`/`ROWS`/`BLOCK` de este módulo, así que dos motores
+ * simultáneos con la misma skin comparten el mismo canvas sin interferirse.
+ *
+ * Antes esto costaba 117 ops por frame (fondo + 28 `stroke()` con su propio
+ * `beginPath`) para pintar exactamente los mismos píxeles; ahora es 1
+ * `drawImage` sin escalado.
+ */
+const bgCache = new Map<SkinId, HTMLCanvasElement>();
+
+function getBackground(skin: Skin): HTMLCanvasElement {
+  const cached = bgCache.get(skin.id);
+  if (cached) return cached;
+
+  const off = document.createElement("canvas");
+  off.width = COLS * BLOCK;
+  off.height = ROWS * BLOCK;
+  const octx = off.getContext("2d");
+  if (!octx) throw new Error("No se pudo prerenderizar el fondo de Tetris");
+
+  // Los tres `bg` de skin son hex opacos (`#000000`/`#000000`/`#020a04`), así
+  // que este relleno tapa el frame anterior por completo y el `clearRect` del
+  // `draw()` deja de ser necesario.
+  octx.fillStyle = skin.bg;
+  octx.fillRect(0, 0, off.width, off.height);
+
+  // Un solo `beginPath`/`stroke` para las 28 líneas, en vez de 28 pares.
+  octx.strokeStyle = skin.grid;
+  octx.lineWidth = 0.5;
+  octx.beginPath();
+  for (let c = 1; c < COLS; c++) {
+    octx.moveTo(c * BLOCK, 0);
+    octx.lineTo(c * BLOCK, ROWS * BLOCK);
+  }
+  for (let r = 1; r < ROWS; r++) {
+    octx.moveTo(0, r * BLOCK);
+    octx.lineTo(COLS * BLOCK, r * BLOCK);
+  }
+  octx.stroke();
+
+  bgCache.set(skin.id, off);
+  return off;
+}
+
 type Piece = {
   type: number;
   shape: number[][];
@@ -124,6 +171,24 @@ export function createGame(
   // Paleta activa. Es lo único que `setSkin` toca: no forma parte del estado
   // de la partida, así que cambiarla no altera tablero, nivel ni puntuación.
   let skin: Skin = getSkin(cb.skin, GAME_ID);
+
+  // Derivados de la skin, recalculados solo cuando la skin cambia (antes el
+  // `withAlpha` del highlight se recomputaba por bloque y por frame con
+  // argumentos invariantes: hasta ~11.760 strings/s con el tablero lleno).
+  let background = getBackground(skin);
+  let highlight = withAlpha(skin.fg, 0.12);
+
+  // El tablero solo cambia al caer/mover/rotar/fijar una pieza: en nivel 1 eso
+  // pasa ~1 vez por segundo, así que el 98,3% de los frames repintaba píxeles
+  // idénticos. Con este flag el canvas se repinta solo cuando algo cambió; el
+  // rAF sigue corriendo porque es el que mide el tiempo de caída.
+  let needsRedraw = true;
+
+  // Último HUD emitido a React. `updateHUD` compara contra esto para no
+  // disparar un `setState` con los mismos números (ver G6).
+  let hudScore = -1;
+  let hudLines = -1;
+  let hudLevel = -1;
 
   function createBoard(): number[][] {
     return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -169,6 +234,7 @@ export function createGame(
       if (!collide(rotated, current.x + kick, current.y)) {
         current.shape = rotated;
         current.x += kick;
+        needsRedraw = true;
         return;
       }
     }
@@ -181,10 +247,17 @@ export function createGame(
           board[current.y + r][current.x + c] = current.shape[r][c];
   }
 
+  /** `true` si la fila no tiene ni un hueco. Bucle con índice: el `every()`
+   * anterior alocaba un closure por fila revisada. */
+  function rowIsFull(row: number[]): boolean {
+    for (let c = 0; c < COLS; c++) if (row[c] === 0) return false;
+    return true;
+  }
+
   function clearLines() {
     let cleared = 0;
     for (let r = ROWS - 1; r >= 0; r--) {
-      if (board[r].every((v) => v !== 0)) {
+      if (rowIsFull(board[r])) {
         board.splice(r, 1);
         board.unshift(new Array(COLS).fill(0));
         cleared++;
@@ -217,6 +290,7 @@ export function createGame(
     if (!collide(current.shape, current.x, current.y + 1)) {
       current.y++;
       score += 1;
+      needsRedraw = true;
       updateHUD();
     } else {
       lockPiece();
@@ -224,6 +298,7 @@ export function createGame(
   }
 
   function lockPiece() {
+    needsRedraw = true;
     merge();
     clearLines();
     spawn();
@@ -238,7 +313,18 @@ export function createGame(
     drawNext();
   }
 
+  /**
+   * Emite el HUD a React solo si alguno de los tres números cambió. Antes se
+   * llamaba incondicionalmente al final de `onKeyDown` con un objeto literal
+   * nuevo, así que cualquier tecla (incluso una no usada por el juego)
+   * re-renderizaba el wrapper — ~30 re-renders/s con el auto-repeat del
+   * teclado y 20/s con el hold de `TouchControls`.
+   */
   function updateHUD() {
+    if (score === hudScore && lines === hudLines && level === hudLevel) return;
+    hudScore = score;
+    hudLines = lines;
+    hudLevel = level;
     cb.onHud({ score, lines, level });
   }
 
@@ -257,35 +343,17 @@ export function createGame(
     context.fillStyle = color;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
     // highlight — en clásico `fg` es blanco, así que sale el rgba original.
-    context.fillStyle = withAlpha(skin.fg, 0.12);
+    // El string lo precomputa `applySkin`: no depende del bloque.
+    context.fillStyle = highlight;
     context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
     context.globalAlpha = 1;
-  }
-
-  function drawGrid() {
-    ctx.strokeStyle = skin.grid;
-    ctx.lineWidth = 0.5;
-    for (let c = 1; c < COLS; c++) {
-      ctx.beginPath();
-      ctx.moveTo(c * BLOCK, 0);
-      ctx.lineTo(c * BLOCK, ROWS * BLOCK);
-      ctx.stroke();
-    }
-    for (let r = 1; r < ROWS; r++) {
-      ctx.beginPath();
-      ctx.moveTo(0, r * BLOCK);
-      ctx.lineTo(COLS * BLOCK, r * BLOCK);
-      ctx.stroke();
-    }
   }
 
   function draw() {
     // El canvas era transparente y dejaba ver el `#000` de la página. Ahora lo
     // pinta la skin; en clásico ese color es el mismo `#000000`, cero regresión.
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = skin.bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawGrid();
+    // Fondo y grilla vienen del offscreen cacheado por skin, sin escalado.
+    ctx.drawImage(background, 0, 0);
 
     // board
     for (let r = 0; r < ROWS; r++)
@@ -315,6 +383,15 @@ export function createGame(
           current.shape[r][c],
           BLOCK,
         );
+
+    needsRedraw = false;
+  }
+
+  /** Recalcula lo que depende de la skin y marca el canvas para repintar. */
+  function applySkin(id: SkinId) {
+    skin = getSkin(id, GAME_ID);
+    background = getBackground(skin);
+    highlight = withAlpha(skin.fg, 0.12);
   }
 
   function drawNext() {
@@ -355,12 +432,16 @@ export function createGame(
       dropAccum = 0;
       if (!collide(current.shape, current.x, current.y + 1)) {
         current.y++;
+        needsRedraw = true;
       } else {
         lockPiece();
       }
     }
     if (gameOver) return;
-    draw();
+    // El rAF sigue vivo (es el reloj de la caída), pero el canvas solo se
+    // repinta si el estado cambió: en nivel 1 eso elimina ~59 de cada 60
+    // repintados idénticos.
+    if (needsRedraw) draw();
     animId = requestAnimationFrame(loop);
   }
 
@@ -376,36 +457,63 @@ export function createGame(
     lastTime = performance.now();
     next = randomPiece();
     spawn();
+    needsRedraw = true;
     updateHUD();
     cancelAnimationFrame(animId);
     animId = requestAnimationFrame(loop);
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement) return;
+    // Guard de foco: además del input del nombre en el modal de fin de
+    // partida, cubre el `<select>` de skin de la barra inferior (con él
+    // enfocado, las flechas cambiaban de skin y movían la pieza a la vez) y
+    // cualquier textarea futura.
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLSelectElement ||
+      e.target instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
     if (e.code === "KeyP") {
+      e.preventDefault();
       togglePause();
       return;
     }
     if (paused || gameOver) return;
+    // `preventDefault` en cada tecla consumida: las flechas hacían scroll de
+    // la página mientras se jugaba.
     switch (e.code) {
       case "ArrowLeft":
-        if (!collide(current.shape, current.x - 1, current.y)) current.x--;
+        e.preventDefault();
+        if (!collide(current.shape, current.x - 1, current.y)) {
+          current.x--;
+          needsRedraw = true;
+        }
         break;
       case "ArrowRight":
-        if (!collide(current.shape, current.x + 1, current.y)) current.x++;
+        e.preventDefault();
+        if (!collide(current.shape, current.x + 1, current.y)) {
+          current.x++;
+          needsRedraw = true;
+        }
         break;
       case "ArrowDown":
+        e.preventDefault();
         softDrop();
         break;
       case "ArrowUp":
       case "KeyX":
+        e.preventDefault();
         tryRotate();
         break;
       case "Space":
         e.preventDefault();
         hardDrop();
         break;
+      default:
+        // Tecla ajena al juego: ni repinta ni emite HUD.
+        return;
     }
     updateHUD();
   }
@@ -421,7 +529,7 @@ export function createGame(
       document.removeEventListener("keydown", onKeyDown);
     },
     setSkin: (id) => {
-      skin = getSkin(id, GAME_ID);
+      applySkin(id);
       // Repinta ya: en pausa o tras el game over el loop está detenido y si no
       // el cambio de skin no se vería hasta la siguiente partida.
       draw();

@@ -115,7 +115,10 @@ export default function TetrisGame() {
 
     return () => {
       handle.destroy();
+      // Las dos refs al motor se anulan: si algo quedara sosteniendo el
+      // wrapper, no retiene además el closure entero del engine.
       handleRef.current = null;
+      restartRef.current = null;
     };
   }, []);
 

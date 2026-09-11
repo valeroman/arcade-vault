@@ -104,6 +104,8 @@ export default function FroggerGame() {
 
     return () => {
       handle.destroy();
+      // Ambas refs sueltan el closure del motor destruido.
+      restartRef.current = null;
       setSkinRef.current = null;
     };
   }, []);

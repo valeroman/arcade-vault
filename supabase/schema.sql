@@ -188,3 +188,93 @@ insert into games (id, title, short, long, cat, cover, color, difficulty, route)
 -- left join scores s on s.game_id = g.id
 -- group by g.id;
 -- grant select on games_with_stats to anon;
+
+-- ============================================================
+-- Tabla: profiles (spec 12)
+-- Perfil de jugador ligado a auth.users. display_name es el
+-- nombre público usado para atribuir scores cuando hay sesión.
+-- Bloque idempotente: se puede re-ejecutar tanto si ya se aplicó
+-- como si no (drop/create de policy y trigger, create or replace
+-- de la función, create table if not exists).
+-- ============================================================
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(display_name) between 1 and 20),
+  created_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+drop policy if exists "profiles_select_public" on profiles;
+create policy "profiles_select_public"
+  on profiles for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "profiles_update_own" on profiles;
+create policy "profiles_update_own"
+  on profiles for update
+  to authenticated
+  using (auth.uid() = id);
+
+-- Permite que el cliente (app/data/profile.ts) auto-repare un
+-- perfil faltante con un upsert cuando el trigger no llegó a correr.
+drop policy if exists "profiles_insert_own" on profiles;
+create policy "profiles_insert_own"
+  on profiles for insert
+  to authenticated
+  with check (auth.uid() = id);
+
+-- Auto-crea el profile al registrarse. Toma el nombre de
+-- raw_user_meta_data: display_name (signUp por email) > full_name
+-- / name (OAuth de Google/GitHub) > prefijo del email > fallback.
+-- Se trunca a 20 chars: el check constraint es 1..20 y un nombre
+-- largo de Google reventaría el insert en auth.users si no se corta.
+create or replace function handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, display_name)
+  values (
+    new.id,
+    upper(left(
+      coalesce(
+        new.raw_user_meta_data->>'display_name',
+        new.raw_user_meta_data->>'full_name',
+        new.raw_user_meta_data->>'name',
+        split_part(new.email, '@', 1),
+        'PLAYER1'
+      ),
+      20
+    ))
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- Backfill: repara cuentas creadas antes de este trigger (p.ej. el
+-- primer login de Google durante el desarrollo de este spec).
+insert into public.profiles (id, display_name)
+select
+  u.id,
+  upper(left(
+    coalesce(
+      u.raw_user_meta_data->>'display_name',
+      u.raw_user_meta_data->>'full_name',
+      u.raw_user_meta_data->>'name',
+      split_part(u.email, '@', 1),
+      'PLAYER1'
+    ),
+    20
+  ))
+from auth.users u
+left join public.profiles p on p.id = u.id
+where p.id is null;

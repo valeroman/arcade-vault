@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { submitScore } from "@/app/data/scores";
+import { getProfile, type Profile } from "@/app/data/profile";
 import {
   DEFAULT_SKIN,
   SKINS,
@@ -63,15 +64,30 @@ export default function AsteroidsGame() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((p) => {
+        if (!cancelled) setProfile(p);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSave = async () => {
     if (finalScore === null) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
+    const playerName = profile ? profile.display_name : name.trim();
+    if (!playerName) return;
     setSaving(true);
     setSaveError(null);
     try {
-      await submitScore("rocas", trimmed, finalScore);
+      await submitScore("rocas", playerName, finalScore);
       setSaved(true);
       (document.activeElement as HTMLElement | null)?.blur();
     } catch {
@@ -918,18 +934,22 @@ export default function AsteroidsGame() {
             <div className="final">{finalScore.toLocaleString("es-ES")}</div>
             {!saved ? (
               <div className="input-row">
-                <input
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value.toUpperCase().slice(0, 20))
-                  }
-                  placeholder="TU NOMBRE"
-                  maxLength={20}
-                />
+                {profile ? (
+                  <input value={profile.display_name} readOnly disabled />
+                ) : (
+                  <input
+                    value={name}
+                    onChange={(e) =>
+                      setName(e.target.value.toUpperCase().slice(0, 20))
+                    }
+                    placeholder="TU NOMBRE"
+                    maxLength={20}
+                  />
+                )}
                 <button
                   className="btn yellow"
                   onClick={handleSave}
-                  disabled={saving || name.trim().length === 0}
+                  disabled={saving || (!profile && name.trim().length === 0)}
                 >
                   {saving ? "GUARDANDO…" : "GUARDAR"}
                 </button>

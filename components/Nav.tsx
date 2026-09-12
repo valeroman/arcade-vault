@@ -1,33 +1,94 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
-import { getProfile, type Profile } from "@/app/data/profile";
+import { getProfileForUser, type Profile } from "@/app/data/profile";
+
+type SessionStatus = "loading" | "in" | "out";
+
+// Componente aparte (no un `if` inline) para que su propio estado
+// `broken` pueda resetearse montándolo de nuevo: el padre le pasa
+// `key={avatar_url}`, así un cambio de perfil/URL siempre arranca en
+// `broken = false` sin necesitar un useEffect que sincronice estado
+// derivado de una prop (patrón desaconsejado por las reglas de hooks).
+function PlayerAvatar({
+  avatarUrl,
+  initial,
+}: {
+  avatarUrl: string | null;
+  initial: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (!avatarUrl || broken) {
+    return <span className="av-player-tile">{initial}</span>;
+  }
+  return (
+    <img
+      src={avatarUrl}
+      alt=""
+      width={32}
+      height={32}
+      referrerPolicy="no-referrer"
+      className="av-player-tile av-player-avatar"
+      onError={() => setBroken(true)}
+    />
+  );
+}
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<Profile | null>(null);
+  const [status, setStatus] = useState<SessionStatus>("loading");
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
 
-    getProfile()
-      .then(setUser)
-      .catch(() => setUser(null));
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      getProfile()
-        .then(setUser)
-        .catch(() => setUser(null));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
+      if (!session?.user) {
+        setStatus("out");
+        return;
+      }
+      setStatus("in");
+      // Deferido: no llamar a Supabase dentro de este callback (aquí
+      // getSession().then, fuera del listener) evita el bloqueo del
+      // navigator lock que produce onAuthStateChange más abajo.
+      getProfileForUser(session.user).then((p) => {
+        if (!cancelled) setProfile(p);
+      });
     });
 
-    return () => subscription.unsubscribe();
+    // No se llama a ninguna función de Supabase directamente dentro
+    // de este callback (deadlock conocido del navigator lock); solo
+    // se lee el `session` que el propio evento entrega, y el fetch
+    // del perfil se difiere a la siguiente vuelta del event loop.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      if (!session?.user) {
+        setStatus("out");
+        setProfile(null);
+        return;
+      }
+      setStatus("in");
+      setTimeout(() => {
+        if (cancelled) return;
+        getProfileForUser(session.user).then((p) => {
+          if (!cancelled) setProfile(p);
+        });
+      }, 0);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const isActive = (
@@ -46,9 +107,22 @@ export default function Nav() {
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    setUser(null);
+    setStatus("out");
+    setProfile(null);
     router.push("/");
+    router.refresh();
   };
+
+  const playerBadge = (
+    <div className="av-player-badge">
+      <PlayerAvatar
+        key={profile?.avatar_url ?? "none"}
+        avatarUrl={profile?.avatar_url ?? null}
+        initial={(profile?.display_name ?? "P")[0]}
+      />
+      <span className="av-player-name">{profile?.display_name ?? "···"}</span>
+    </div>
+  );
 
   return (
     <>
@@ -88,10 +162,17 @@ export default function Nav() {
           <span>CRÉDITOS · 03</span>
         </div>
 
-        {user ? (
-          <button className="btn ghost auth-btn" onClick={handleSignOut}>
-            {user.display_name} ▾
-          </button>
+        {status === "loading" ? (
+          <div className="av-player-badge loading" aria-hidden="true">
+            <span className="av-player-tile">···</span>
+          </div>
+        ) : status === "in" ? (
+          <div className="av-player-wrap">
+            {playerBadge}
+            <button className="btn ghost auth-btn" onClick={handleSignOut}>
+              Cerrar sesión
+            </button>
+          </div>
         ) : (
           <Link href="/auth" className="btn auth-btn">
             Iniciar Sesión
@@ -151,9 +232,24 @@ export default function Nav() {
           className={isActive("auth") ? "active" : ""}
           onClick={close}
         >
-          {user ? "Cuenta" : "Iniciar Sesión"}
+          {status === "in" ? "Cuenta" : "Iniciar Sesión"}
         </Link>
         <div style={{ flex: 1 }} />
+        {status === "in" && (
+          <div className="av-player-wrap av-player-wrap-mobile">
+            {playerBadge}
+            <button
+              className="btn ghost"
+              style={{ width: "100%", marginTop: 10 }}
+              onClick={() => {
+                close();
+                handleSignOut();
+              }}
+            >
+              Cerrar sesión
+            </button>
+          </div>
+        )}
         <div
           className="pixel"
           style={{

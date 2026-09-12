@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 
@@ -17,6 +17,19 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // El callback de OAuth (/auth/callback) redirige aquí con ?error=auth
+  // cuando exchangeCodeForSession falla (p. ej. el login se abrió en un
+  // origen distinto al que completó el redirect). Se lee en un efecto
+  // (no en un initializer de useState) a propósito: window.location no
+  // existe en el render de servidor, y un initializer que lo consultara
+  // divergiría del HTML servido, provocando un hydration mismatch.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "auth") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza con un API del navegador (URL), no con estado derivable durante el render
+      setError("No pudimos completar el acceso. Inténtalo de nuevo.");
+    }
+  }, []);
 
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -66,6 +79,7 @@ export default function AuthPage() {
       return;
     }
     router.push("/games");
+    router.refresh();
   };
 
   const guestLogin = () => {
@@ -77,7 +91,11 @@ export default function AuthPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${SITE_URL}/auth/callback` },
+      // El origin real del navegador, no NEXT_PUBLIC_SITE_URL: si se
+      // navega por una IP de LAN (allowedDevOrigins) o un puerto
+      // distinto, forzar localhost:3000 deja el code_verifier PKCE
+      // en un origen y el intercambio en /auth/callback falla.
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) setError(error.message);
   };

@@ -289,6 +289,71 @@ a {
   display: none;
 }
 
+/* ===== indicador de sesión ===== */
+.av-player-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin-left: 16px;
+}
+.av-player-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.av-player-tile {
+  width: 32px;
+  height: 32px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  font-family: var(--pixel);
+  font-size: 12px;
+  color: var(--ink);
+  background:
+    linear-gradient(45deg, var(--magenta) 0 50%, transparent 50%),
+    linear-gradient(-45deg, var(--cyan) 0 50%, transparent 50%);
+  background-blend-mode: screen;
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.2);
+}
+.av-player-tile.av-player-avatar {
+  object-fit: cover;
+  background: none;
+  box-shadow: none;
+}
+.av-player-name {
+  display: inline-block;
+  line-height: 1;
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 245, 255, 0.65);
+}
+.av-player-badge.loading {
+  display: flex;
+  align-items: center;
+  margin-left: 16px;
+}
+.av-player-badge.loading .av-player-tile {
+  background: none;
+  color: var(--ink-faint);
+}
+.av-player-wrap-mobile {
+  margin: 12px 0 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.av-player-wrap-mobile .btn {
+  flex-basis: 100%;
+}
+
 @media (max-width: 840px) {
   .av-nav {
     padding: 12px 16px;
@@ -299,6 +364,20 @@ a {
   .av-nav .coin-counter {
     display: none;
   }
+  /* En colapsado solo cabe el avatar (32px) junto al hamburguesa: el
+     nombre y "Cerrar sesión" siguen accesibles al abrir el menú, pero
+     así se ve de un vistazo si hay sesión iniciada sin tener que abrirlo. */
+  .av-nav .av-player-wrap {
+    margin-left: 8px;
+    gap: 0;
+  }
+  .av-nav .av-player-wrap .av-player-name,
+  .av-nav .av-player-wrap .btn {
+    display: none;
+  }
+  .av-nav .av-player-badge.loading {
+    margin-left: 8px;
+  }
   .av-nav .hamburger {
     display: inline-flex;
   }
@@ -308,6 +387,15 @@ a {
   position: fixed;
   inset: 0 0 0 auto;
   width: min(320px, 86vw);
+  /* `inset: 0` por sí solo equivale a height:100vh, que en Safari/Chrome
+     móvil se resuelve contra el viewport de layout (barra de direcciones
+     oculta) para elementos fixed, no contra el visible real. Eso empuja
+     el contenido pegado al final (el spacer flex:1) por debajo de lo que
+     el usuario ve. 100dvh usa el viewport visible dinámico y overflow-y
+     hace scrolleable el panel si aun así no cupiera todo. */
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
   background: var(--bg-2);
   border-left: 1px solid var(--line);
   z-index: 60;

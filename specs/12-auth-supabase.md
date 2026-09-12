@@ -1,7 +1,7 @@
 ---
 id: 12
 title: Autenticación real con Supabase — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-09-11
 dependencies: [04]
 env:

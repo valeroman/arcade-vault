@@ -57,7 +57,7 @@ TypeScript alias `@/` resolves to repo root, so imports like `@/components/...` 
 - `app/data/scores.ts` — `ScoreRow` type, `getTopScores(gameId, limit)` (score desc, `created_at` asc tiebreak), `submitScore(gameId, playerName, score)`.
 - `app/data/user.ts` — fake "session" stored only in `localStorage` (key `av_user`), read by `Nav.tsx`.
 - `utils/supabase/client.ts` (`createBrowserClient`) and `utils/supabase/server.ts` (`createServerClient`, `await cookies()`).
-- **No real auth.** `middleware.ts` calls `supabase.auth.getUser()` only to refresh cookies; nothing consumes a session, and every RLS policy is `to anon`. No state management library either — plain `useState`/`useEffect`/`useMemo` and refs.
+- **No real auth.** `proxy.ts` (renamed from `middleware.ts` — Next.js 16 deprecated the `middleware` file convention) calls `supabase.auth.getUser()` only to refresh cookies; nothing consumes a session, and every RLS policy is `to anon`. No state management library either — plain `useState`/`useEffect`/`useMemo` and refs.
 
 ### Design system
 

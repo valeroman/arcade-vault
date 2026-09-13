@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { validatePassword } from "@/app/auth/password";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
 
@@ -50,6 +51,12 @@ export default function AuthPage() {
     const supabase = createClient();
 
     if (tab === "up") {
+      const passwordError = validatePassword(pass);
+      if (passwordError) {
+        setLoading(false);
+        setError(passwordError);
+        return;
+      }
       const { error } = await supabase.auth.signUp({
         email,
         password: pass,

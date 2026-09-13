@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { validatePassword } from "@/app/auth/password";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -15,8 +16,9 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
 
-    if (pass.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres.");
+    const passwordError = validatePassword(pass);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (pass !== confirm) {

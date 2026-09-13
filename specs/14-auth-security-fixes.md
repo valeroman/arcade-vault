@@ -1,7 +1,7 @@
 ---
 id: 14
 title: Endurecimiento de auth — correcciones de auditoría de seguridad
-state: Aprobado
+state: Implementado
 date: 2026-09-13
 dependencies: [12, 13]
 ---
@@ -100,28 +100,28 @@ Cada paso deja el sistema funcional; se puede pausar entre pasos sin romper nada
 
 ## Acceptance criteria
 
-- [ ] `?next=/\evil.com` (y variantes con backslash) en `/auth/callback` ya no redirige fuera del
+- [x] `?next=/\evil.com` (y variantes con backslash) en `/auth/callback` ya no redirige fuera del
       origen — cae al fallback `/games`.
-- [ ] `?next=/auth/reset-password` en `/auth/callback` sigue funcionando (mismo origen, redirect
+- [x] `?next=/auth/reset-password` en `/auth/callback` sigue funcionando (mismo origen, redirect
       válido).
-- [ ] `app/auth/errors.ts` existe, exporta `GENERIC_AUTH_ERROR` y `getAuthErrorMessage()`.
-- [ ] En `/auth`, login con credenciales incorrectas muestra el mensaje genérico en español, no el
+- [x] `app/auth/errors.ts` existe, exporta `GENERIC_AUTH_ERROR` y `getAuthErrorMessage()`.
+- [x] En `/auth`, login con credenciales incorrectas muestra el mensaje genérico en español, no el
       texto crudo de Supabase.
-- [ ] En `/auth`, signup con un email ya registrado muestra el mensaje genérico (no "User already
+- [x] En `/auth`, signup con un email ya registrado muestra el mensaje genérico (no "User already
       registered").
-- [ ] En `/auth`, el error de `signInWithOAuth` (si falla) muestra el mensaje genérico.
-- [ ] El error de la solicitud de recuperación de contraseña ("¿Olvidaste tu contraseña?") muestra
+- [x] En `/auth`, el error de `signInWithOAuth` (si falla) muestra el mensaje genérico.
+- [x] El error de la solicitud de recuperación de contraseña ("¿Olvidaste tu contraseña?") muestra
       el mensaje genérico.
-- [ ] En `/auth/reset-password`, un error de `updateUser` (p. ej. contraseña débil, ya cubierto por
+- [x] En `/auth/reset-password`, un error de `updateUser` (p. ej. contraseña débil, ya cubierto por
       `validatePassword`) muestra el mensaje genérico si Supabase lo rechaza igual.
-- [ ] Navegar directo a `/auth/reset-password` **sin sesión** redirige a `/auth`.
-- [ ] Flujo completo de recuperación: pedir reset en `/auth` → abrir el link del correo → llega a
+- [x] Navegar directo a `/auth/reset-password` **sin sesión** redirige a `/auth`.
+- [x] Flujo completo de recuperación: pedir reset en `/auth` → abrir el link del correo → llega a
       `/auth/reset-password` (ya no a `/games`) → cambiar contraseña → queda deslogueado → loguear
       con la contraseña nueva funciona.
-- [ ] Un usuario OAuth sin `display_name`/`full_name`/`name` (o con lectura fallida de `profiles`)
+- [x] Un usuario OAuth sin `display_name`/`full_name`/`name` (o con lectura fallida de `profiles`)
       muestra `"PLAYER1"`, nunca la parte local de su email.
-- [ ] `npm run build` sin errores de TypeScript ni imports rotos.
-- [ ] Sin regresiones en signup normal, login normal, OAuth normal, ni en el modo invitado de los 5
+- [x] `npm run build` sin errores de TypeScript ni imports rotos.
+- [x] Sin regresiones en signup normal, login normal, OAuth normal, ni en el modo invitado de los 5
       juegos.
 
 ---

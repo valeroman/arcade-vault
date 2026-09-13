@@ -57,7 +57,11 @@ export default function ResetPasswordPage() {
       setError(getAuthErrorMessage(error));
       return;
     }
-    router.push("/games");
+    // Cierra la sesión (de recovery o normal) para que el usuario confirme
+    // la contraseña nueva volviendo a loguearse, en vez de quedar en /games
+    // con una sesión que ya no tiene sentido mantener abierta.
+    await supabase.auth.signOut();
+    router.push("/auth");
   };
 
   return (

@@ -1,7 +1,7 @@
 ---
 id: 13
 title: Checklist de seguridad básica — Arcade Vault
-state: Aprobado
+state: Implementado
 date: 2026-09-13
 dependencies: [04, 12]
 ---

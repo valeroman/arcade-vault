@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { validatePassword } from "@/app/auth/password";
+import { getAuthErrorMessage } from "@/app/auth/errors";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
 
@@ -69,7 +70,7 @@ export default function AuthPage() {
       });
       setLoading(false);
       if (error) {
-        setError(error.message);
+        setError(getAuthErrorMessage(error));
         return;
       }
       setMessage("Revisa tu correo para confirmar tu cuenta.");
@@ -82,7 +83,7 @@ export default function AuthPage() {
     });
     setLoading(false);
     if (error) {
-      setError(error.message);
+      setError(getAuthErrorMessage(error));
       return;
     }
     router.push("/games");
@@ -104,7 +105,7 @@ export default function AuthPage() {
       // en un origen y el intercambio en /auth/callback falla.
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-    if (error) setError(error.message);
+    if (error) setError(getAuthErrorMessage(error));
   };
 
   const openForgot = () => {
@@ -120,11 +121,11 @@ export default function AuthPage() {
     setForgotLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-      redirectTo: `${SITE_URL}/auth/callback`,
+      redirectTo: `${SITE_URL}/auth/callback?next=/auth/reset-password`,
     });
     setForgotLoading(false);
     if (error) {
-      setForgotError(error.message);
+      setForgotError(getAuthErrorMessage(error));
       return;
     }
     setForgotSent(true);

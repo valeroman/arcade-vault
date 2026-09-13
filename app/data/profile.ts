@@ -9,13 +9,7 @@ export type Profile = {
 
 function deriveDisplayName(user: User): string {
   const meta = user.user_metadata ?? {};
-  return (
-    meta.display_name ||
-    meta.full_name ||
-    meta.name ||
-    user.email?.split("@")[0] ||
-    "PLAYER1"
-  )
+  return (meta.display_name || meta.full_name || meta.name || "PLAYER1")
     .toString()
     .toUpperCase()
     .slice(0, 20);

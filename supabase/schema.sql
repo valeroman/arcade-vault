@@ -278,3 +278,12 @@ select
 from auth.users u
 left join public.profiles p on p.id = u.id
 where p.id is null;
+
+-- ============================================================
+-- Checklist de seguridad básica (spec 13)
+-- ============================================================
+-- `rls_auto_enable()` es drift del proyecto Supabase en vivo (no está definida
+-- en este schema, origen desconocido). Se revoca el acceso público en vez de
+-- borrarla, para resolver los 2 hallazgos WARN del linter sin arriesgar romper
+-- algo que dependa de ella.
+revoke execute on function public.rls_auto_enable() from anon, authenticated;

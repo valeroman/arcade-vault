@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { validatePassword } from "@/app/auth/password";
+import { getAuthErrorMessage } from "@/app/auth/errors";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password: pass });
     setLoading(false);
     if (error) {
-      setError(error.message);
+      setError(getAuthErrorMessage(error));
       return;
     }
     router.push("/games");
